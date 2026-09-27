@@ -17,8 +17,9 @@
 //
 // Exit codes: 0 ok, 1 the server refused or failed, 2 usage error.
 
-import { readFileSync, statSync } from 'node:fs';
-import { basename } from 'node:path';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
 
 const HELP = `usage:
   labbook-submit run --type <slug> [options]
@@ -42,7 +43,9 @@ const HELP = `usage:
   labbook-submit attach --run <run-id> <file>...
   labbook-submit get <api-path>
 
-env: LABBOOK_URL, LABBOOK_TOKEN (required); NODE_EXTRA_CA_CERTS for the cluster CA.
+env: LABBOOK_URL (required); NODE_EXTRA_CA_CERTS for the cluster CA.
+token, first found: --token-file <file>, $LABBOOK_TOKEN_FILE, $LABBOOK_TOKEN, ~/.config/labbook/token
+     (a token file keeps the secret off command lines and out of the environment).
      --insecure skips TLS verification (last resort).`;
 
 function die(msg, code = 2) {
@@ -97,9 +100,21 @@ function kv(s, typed) {
 
 function config(opts) {
   const url = (process.env.LABBOOK_URL || '').replace(/\/+$/, '');
-  const token = process.env.LABBOOK_TOKEN || '';
   if (!url) die('set LABBOOK_URL (e.g. https://labbook.kw.watteel.lab)');
-  if (!token) die('set LABBOOK_TOKEN (create one under Admin → API tokens)');
+  const defaultFile = join(homedir(), '.config', 'labbook', 'token');
+  const file =
+    opts['token-file'] ||
+    process.env.LABBOOK_TOKEN_FILE ||
+    (!process.env.LABBOOK_TOKEN && existsSync(defaultFile) ? defaultFile : '');
+  let token = process.env.LABBOOK_TOKEN || '';
+  if (file) {
+    try {
+      token = readFileSync(file, 'utf8').trim();
+    } catch (e) {
+      die(`cannot read token file ${file}: ${e.message}`);
+    }
+  }
+  if (!token) die('no API token: pass --token-file, or create ~/.config/labbook/token (Admin → API tokens)');
   if (opts.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   return { url, token };
 }

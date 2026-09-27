@@ -68,7 +68,7 @@ export NODE_EXTRA_CA_CERTS=~/.labbook/cluster-ca.crt   # for labbook-submit (Nod
 
 ```bash
 export LABBOOK_URL=https://labbook.kw.watteel.lab
-export LABBOOK_TOKEN=lbk_...              # Admin → API tokens
+# the token: --token-file <file>, $LABBOOK_TOKEN_FILE, $LABBOOK_TOKEN, or ~/.config/labbook/token (chmod 600)
 
 node labbook-submit.mjs run --type turbine-lab-bench \
   --external-id "lab-bench:$label-$model:$commit" \
