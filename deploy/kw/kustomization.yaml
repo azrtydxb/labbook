@@ -13,4 +13,4 @@ images:
   # Pinned by digest; update from the CI run's summary (never a moving tag).
   - name: labbook
     newName: 192.168.10.131/azrtydxb/labbook
-    digest: sha256:ca20271b4d702f81ac1cad4ffa7e641579b1cc9fea705b55d0ffa6d3ae4f7c7d
+    digest: sha256:4bfe46cd5bc2e2515fb4523619c4e987c83669dd0cefec2eb008f7158011ed49
