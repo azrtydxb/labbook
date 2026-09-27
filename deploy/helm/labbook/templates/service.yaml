@@ -1,0 +1,15 @@
+{{- $fullname := include "labbook.fullname" . -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "labbook.labels" (dict "ctx" . "name" $fullname) | nindent 4 }}
+spec:
+  selector:
+    {{- include "labbook.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

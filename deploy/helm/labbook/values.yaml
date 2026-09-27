@@ -1,0 +1,139 @@
+# -- Override the release-derived name of every object (labbook, labbook-db, ...).
+fullnameOverride: ''
+
+image:
+  # -- Full reference, e.g. registry/labbook:main@sha256:<digest>. Takes precedence over
+  # repository/tag/digest, and fits on one line for an image-automation setter comment.
+  ref: ''
+  repository: ''
+  # -- Defaults to the chart's appVersion when neither tag nor digest is set.
+  tag: ''
+  # -- sha256:<hex>. Pin by digest in production rather than a moving tag.
+  digest: ''
+  # -- Left out of the pod spec when empty (Kubernetes defaults it).
+  pullPolicy: ''
+
+imagePullSecrets: []
+
+# -- Sessions and all state live in Postgres, so replicas can scale out.
+replicas: 1
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+# -- Prefer putting replicas on different nodes.
+spreadAcrossNodes: true
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 192Mi
+  limits:
+    memory: 1Gi
+
+limits:
+  # -- MAX_ATTACHMENT_BYTES: largest single attachment (25 MiB).
+  maxAttachmentBytes: 26214400
+  # -- MAX_BODY_BYTES: largest request body (64 MiB). Keep the ingress body size at least this.
+  maxBodyBytes: 67108864
+
+# -- Extra container env entries, appended after the chart's own.
+extraEnv: []
+
+# -- Operator-created Secret seeding the first admin while the users table is empty.
+# The chart never creates it; empty means <fullname>-admin. Both keys are optional.
+admin:
+  secretName: ''
+  usernameKey: username
+  passwordKey: password
+
+# -- The Secret holding the database URI. Empty means the one CloudNativePG generates
+# (<fullname>-db-app); set it when postgresql.enabled is false.
+database:
+  secretName: ''
+  uriKey: uri
+
+service:
+  port: 80
+
+ingress:
+  enabled: false
+  className: nginx
+  # -- Required when enabled.
+  host: ''
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    # Batches with inline attachments; attachments themselves are capped at 25 MiB.
+    nginx.ingress.kubernetes.io/proxy-body-size: 64m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '300'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '300'
+  tls:
+    enabled: true
+    # -- Empty means <fullname>-tls.
+    secretName: ''
+    # -- A cert-manager Certificate for the host, written to tls.secretName.
+    certificate:
+      enabled: false
+      issuerKind: ClusterIssuer
+      # -- Required when the Certificate is enabled.
+      issuerName: ''
+
+# -- Add helm.sh/resource-policy: keep to the database Cluster and the dumps PVC.
+keepData: true
+
+# -- A CloudNativePG Cluster named <fullname>-db (the operator must be installed).
+postgresql:
+  enabled: true
+  instances: 2
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.6
+  primaryUpdateStrategy: unsupervised
+  # -- Labels/annotations CNPG copies onto its pods, PVCs and services.
+  inheritedMetadata: {}
+  storage:
+    size: 10Gi
+    # -- Empty means the cluster's default StorageClass.
+    storageClass: ''
+    resizeInUseVolumes: true
+  database: labbook
+  owner: labbook
+  encoding: UTF8
+  locale: C
+  parameters:
+    max_connections: '100'
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  podAntiAffinityType: required
+
+# -- Logical backups: a pg_dump -Fc CronJob writing to the <fullname>-dumps PVC.
+backups:
+  enabled: true
+  schedule: '17 */6 * * *'
+  retentionDays: 30
+  # -- Empty means postgresql.imageName.
+  image: ''
+  # -- Empty means <fullname>-db-rw.
+  pgHost: ''
+  # -- Run a root init container that chowns the volume to uid 26 (NFS ignores fsGroup).
+  chownVolume: true
+  storage:
+    size: 20Gi
+    # -- Empty means the cluster's default StorageClass.
+    storageClass: ''
+    accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 512Mi

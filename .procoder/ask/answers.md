@@ -1,6 +1,6 @@
 # What a human decided
 
-Written 2026-09-27 07:48 UTC. procoder reads this
+Written 2026-09-27 07:58 UTC. procoder reads this
 file to avoid asking a question twice; edit an answer here to change what
 it believes. Reword the question and it will be asked again.
 
@@ -35,6 +35,17 @@ Question: Target zones: where they are defined
 - On the baseline (e.g. the vLLM baseline carries "tok_s >= 75%")
 
 Answer: Type definition — per data point next to the bounds, versioned with the schema; references: named baseline, previous best, or absolute (user, 2026-09-27)
+
+## [decision] decisions.md
+
+Key: 62a39568eb6f
+Question: Kuvryn Sync image write-back credential for azrtydxb/labbook
+
+- You create a fine-grained GitHub token (Contents: read/write on azrtydxb/labbook) and load it with a kubectl command
+- I create a write-enabled deploy key with gh and store its private half only in the cluster Secret
+- No write-back: Kuvryn Sync syncs Git only; image bumps stay a manual commit of the digest
+
+Answer: Deploy key created by Claude with gh (write access, azrtydxb/labbook only); private half only in the cluster Secret (user, 2026-09-27)
 
 ## [decision] decisions.md
 

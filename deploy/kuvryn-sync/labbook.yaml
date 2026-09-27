@@ -1,0 +1,137 @@
+# Kuvryn Sync keeps labbook on kw in step with main: the Repository follows the Git
+# branch, the ImagePolicy follows the `main` image tag and commits each new digest
+# into deploy/helm/labbook/values-kw.yaml, and the Application renders that chart.
+# Applied once by hand:  kubectl --context kw apply -f deploy/kuvryn-sync/labbook.yaml
+#
+# Image write-back needs push access. It stays off until the Secret below exists
+# (a fine-grained token with Contents: read and write on azrtydxb/labbook only):
+#   read -rs T && kubectl --context kw -n labbook create secret generic labbook-git \
+#     --from-literal=username=x-access-token --from-literal=token="$T" && unset T
+#   kubectl --context kw -n labbook label secret labbook-git sync.kuvryn.io/git-credentials=true
+# then uncomment spec.imageUpdate on the Repository and apply again.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kuvryn-sync-deployer
+  namespace: labbook
+---
+# What the chart renders, and what health checks read; nothing cluster-scoped.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kuvryn-sync-deployer
+  namespace: labbook
+rules:
+  - apiGroups: ['']
+    resources: [services, serviceaccounts, persistentvolumeclaims, configmaps]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [batch]
+    resources: [cronjobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [cert-manager.io]
+    resources: [certificates]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [postgresql.cnpg.io]
+    resources: [clusters]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: ['']
+    resources: [pods, events, secrets]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kuvryn-sync-deployer
+  namespace: labbook
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kuvryn-sync-deployer
+subjects:
+  - kind: ServiceAccount
+    name: kuvryn-sync-deployer
+    namespace: labbook
+---
+apiVersion: sync.kuvryn.io/v1alpha1
+kind: Repository
+metadata:
+  name: labbook
+  namespace: labbook
+spec:
+  type: git
+  git:
+    url: https://github.com/azrtydxb/labbook.git
+    revision: main
+  pollInterval: 60s
+  # imageUpdate:
+  #   secretRef:
+  #     name: labbook-git
+  #   branch: main
+  #   path: deploy/helm/labbook
+  #   authorName: kuvryn-sync
+  #   authorEmail: kuvryn-sync@kw.watteel.lab
+---
+apiVersion: sync.kuvryn.io/v1alpha1
+kind: ImagePolicy
+metadata:
+  name: labbook
+  namespace: labbook
+spec:
+  # The pull address the nodes use; CI pushes the same repository via :5000.
+  image: 192.168.10.131/azrtydxb/labbook
+  interval: 2m
+  policy:
+    digest:
+      tag: main
+---
+apiVersion: sync.kuvryn.io/v1alpha1
+kind: Application
+metadata:
+  name: labbook
+  namespace: labbook
+spec:
+  destination:
+    namespace: labbook
+  serviceAccountName: kuvryn-sync-deployer
+  deletionPolicy: Orphan
+  source:
+    repositoryRef:
+      name: labbook
+    revision: main
+    path: deploy/helm/labbook
+    render:
+      type: helm
+      helm:
+        releaseName: labbook
+        valuesFiles: [values-kw.yaml]
+  health:
+    timeout: 10m
+  history:
+    limit: 10
+  strategy:
+    type: rolling
+    failurePolicy:
+      action: rollback
+      maxAttempts: 2
+      timeout: 10m
+  sync:
+    automatic: true
+    # The live objects were created by kubectl apply -k; adopt them in place.
+    conflictPolicy: adopt
+    prune: true
+    selfHeal: true

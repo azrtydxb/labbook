@@ -33,3 +33,9 @@ Answered 2026-09-27: named baseline groups; bounds stay on the previous run (bas
 - Commit to main, push, and deploy to kw once CI has built the image
 - Open a pull request instead and deploy after review
 - Commit locally only; ship later
+
+## Kuvryn Sync image write-back credential for azrtydxb/labbook
+
+- You create a fine-grained GitHub token (Contents: read/write on azrtydxb/labbook) and load it with a kubectl command
+- I create a write-enabled deploy key with gh and store its private half only in the cluster Secret
+- No write-back: Kuvryn Sync syncs Git only; image bumps stay a manual commit of the digest

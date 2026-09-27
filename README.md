@@ -176,10 +176,16 @@ kubectl --context kw create namespace labbook
 kubectl --context kw -n labbook create secret generic labbook-admin \
   --from-literal=username=admin --from-literal=password="$(openssl rand -base64 30 | tr -d '/+=\n' | cut -c1-28)"
 
-# every release: put the digest from the CI summary into deploy/kw/kustomization.yaml, then
-kubectl --context kw apply -k deploy/kw
+# once: Kuvryn Sync (Repository, ImagePolicy, Application and the deployer RBAC)
+kubectl --context kw apply -f deploy/kuvryn-sync/labbook.yaml
 kubectl --context kw -n labbook rollout status deploy/labbook
 ```
+
+Releases are GitOps: Kuvryn Sync renders the Helm chart in [deploy/helm/labbook](deploy/helm/labbook/README.md)
+with `values-kw.yaml` from `main` and applies it. Its ImagePolicy follows the `main` image tag and
+commits each new digest to the `image.ref` line of `values-kw.yaml`, so a merged commit rolls out by
+itself once CI has pushed the image. `deploy/kw` (kustomize) is the previous, manual path, kept until
+the Helm route has run for a while.
 
 `*.kw.watteel.lab` already resolves to the ingress-nginx LoadBalancer (192.168.10.120), so no DNS
 change is needed; cert-manager's `cluster-ca` issues `labbook-tls`.

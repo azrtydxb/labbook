@@ -1,0 +1,44 @@
+# kw overrides. Kuvryn Sync renders the chart with this file as release `labbook` in the
+# `labbook` namespace. The namespace and the labbook-admin Secret exist beforehand.
+#
+# Pinned by digest; the setter comment lets image automation rewrite the line.
+image:
+  ref: 192.168.10.131/azrtydxb/labbook:main@sha256:4bfe46cd5bc2e2515fb4523619c4e987c83669dd0cefec2eb008f7158011ed49 # {"$imagepolicy": "labbook:labbook"}
+
+replicas: 2
+
+admin:
+  secretName: labbook-admin
+
+ingress:
+  enabled: true
+  className: nginx
+  # *.kw.watteel.lab resolves to the ingress-nginx LoadBalancer 192.168.10.120.
+  host: labbook.kw.watteel.lab
+  tls:
+    secretName: labbook-tls
+    certificate:
+      enabled: true
+      issuerKind: ClusterIssuer
+      issuerName: cluster-ca
+
+postgresql:
+  # Two instances on different nodes, one Longhorn replica each (CNPG already replicates).
+  instances: 2
+  inheritedMetadata:
+    labels:
+      # Longhorn syncs recurring-job labels from the PVC to its volume: the daily
+      # `critical` backup to the NAS.
+      recurring-job.longhorn.io/source: enabled
+      recurring-job-group.longhorn.io/critical: enabled
+  storage:
+    size: 10Gi
+    storageClass: longhorn-single
+
+backups:
+  schedule: '17 */6 * * *'
+  retentionDays: 30
+  # TrueNAS NFS; after the first bind, set the PV's reclaim policy to Retain.
+  storage:
+    size: 20Gi
+    storageClass: truenas-nfs

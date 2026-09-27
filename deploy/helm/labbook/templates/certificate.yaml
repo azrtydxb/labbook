@@ -1,0 +1,19 @@
+{{- if and .Values.ingress.enabled .Values.ingress.tls.enabled .Values.ingress.tls.certificate.enabled }}
+{{- $fullname := include "labbook.fullname" . -}}
+{{- $host := required "ingress.host is required when ingress.enabled" .Values.ingress.host }}
+{{- $secret := include "labbook.tlsSecretName" . }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $secret }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "labbook.labels" (dict "ctx" . "name" $fullname) | nindent 4 }}
+spec:
+  secretName: {{ $secret }}
+  dnsNames:
+    - {{ $host }}
+  issuerRef:
+    kind: {{ .Values.ingress.tls.certificate.issuerKind }}
+    name: {{ required "ingress.tls.certificate.issuerName is required when the Certificate is enabled" .Values.ingress.tls.certificate.issuerName }}
+{{- end }}

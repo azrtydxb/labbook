@@ -1,0 +1,47 @@
+{{- if .Values.postgresql.enabled }}
+{{- $fullname := include "labbook.fullname" . -}}
+{{- $pg := .Values.postgresql -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $fullname }}-db
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "labbook.labels" (dict "ctx" . "name" (printf "%s-db" $fullname)) | nindent 4 }}
+  {{- if .Values.keepData }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  instances: {{ $pg.instances }}
+  imageName: {{ $pg.imageName }}
+  primaryUpdateStrategy: {{ $pg.primaryUpdateStrategy }}
+  {{- with $pg.inheritedMetadata }}
+  inheritedMetadata:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  storage:
+    size: {{ $pg.storage.size }}
+    {{- with $pg.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+    resizeInUseVolumes: {{ $pg.storage.resizeInUseVolumes }}
+  bootstrap:
+    initdb:
+      database: {{ $pg.database }}
+      owner: {{ $pg.owner }}
+      encoding: {{ $pg.encoding }}
+      localeCType: {{ $pg.locale }}
+      localeCollate: {{ $pg.locale }}
+  {{- with $pg.parameters }}
+  postgresql:
+    parameters:
+      {{- range $k, $v := . }}
+      {{ $k }}: {{ $v | toString | quote }}
+      {{- end }}
+  {{- end }}
+  resources:
+    {{- toYaml $pg.resources | nindent 4 }}
+  affinity:
+    podAntiAffinityType: {{ $pg.podAntiAffinityType }}
+{{- end }}

@@ -1,0 +1,113 @@
+{{- if .Values.backups.enabled }}
+{{- $fullname := include "labbook.fullname" . -}}
+{{- $b := .Values.backups -}}
+{{- $image := $b.image | default .Values.postgresql.imageName -}}
+{{- $dbSecret := include "labbook.dbSecretName" . -}}
+# Logical backups: pg_dump -Fc on a schedule onto a separate volume, pruned after
+# backups.retentionDays. Restore with pg_restore --clean --if-exists (see README.md).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-dumps
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "labbook.labels" (dict "ctx" . "name" (printf "%s-dumps" $fullname)) | nindent 4 }}
+  {{- if .Values.keepData }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  {{- with $b.storage.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  accessModes:
+    {{- toYaml $b.storage.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ $b.storage.size }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullname }}-pg-dump
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "labbook.labels" (dict "ctx" . "name" (printf "%s-pg-dump" $fullname)) | nindent 4 }}
+spec:
+  schedule: {{ $b.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ $fullname }}-pg-dump
+        spec:
+          restartPolicy: OnFailure
+          {{- if $b.chownVolume }}
+          initContainers:
+            # NFS ignores fsGroup; hand the directory to the postgres user once.
+            - name: own-dumps
+              image: {{ $image }}
+              command: ["sh", "-c", "chown 26:26 /dumps && chmod 750 /dumps"]
+              securityContext:
+                runAsUser: 0
+                runAsNonRoot: false
+                capabilities:
+                  drop: ["ALL"]
+                  add: ["CHOWN", "FOWNER"]
+              volumeMounts:
+                - name: dumps
+                  mountPath: /dumps
+          {{- end }}
+          containers:
+            - name: pg-dump
+              image: {{ $image }}
+              env:
+                - name: PGHOST
+                  value: {{ $b.pgHost | default (printf "%s-db-rw" $fullname) }}
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $dbSecret }}
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $dbSecret }}
+                      key: password
+                - name: PGDATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $dbSecret }}
+                      key: dbname
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  f="/dumps/{{ $fullname }}-$(date -u +%Y%m%dT%H%M%SZ).dump"
+                  pg_dump -Fc -f "$f.partial"
+                  mv "$f.partial" "$f"
+                  find /dumps -name '{{ $fullname }}-*.dump' -mtime +{{ $b.retentionDays }} -delete
+                  echo "wrote $f ($(du -h "$f" | cut -f1)); $(ls /dumps | wc -l) dumps kept"
+              securityContext:
+                runAsUser: 26
+                runAsNonRoot: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                {{- toYaml $b.resources | nindent 16 }}
+              volumeMounts:
+                - name: dumps
+                  mountPath: /dumps
+          volumes:
+            - name: dumps
+              persistentVolumeClaim:
+                claimName: {{ $fullname }}-dumps
+{{- end }}
