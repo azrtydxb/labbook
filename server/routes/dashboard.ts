@@ -6,7 +6,7 @@ import type { Database } from '../db/index.js';
 import { evaluateRun, identityKey, primaryPoint } from '../../shared/evaluate.js';
 import type { Scalar, TypeDefinition } from '../../shared/types.js';
 import { listRuns } from '../services/runs.js';
-import { getDefinition } from '../services/testTypes.js';
+import { mergedDefinition } from '../services/testTypes.js';
 
 export function dashboardRoutes(app: FastifyInstance, db: Database): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -76,46 +76,51 @@ export function dashboardRoutes(app: FastifyInstance, db: Database): void {
       for (const t of types) {
         const rows = await db
           .selectFrom('runs')
-          .select(['id', 'run_at', 'params', 'results', 'type_version'])
+          .select(['id', 'run_at', 'params', 'results'])
           .where('test_type_id', '=', t.id)
           .orderBy('run_at', 'asc')
           .orderBy('seq', 'asc')
           .execute();
-        const current = await getDefinition(db, t.id, t.current_version);
+        // Judge every run with the current schema (its headline and bounds), so that a
+        // headline change applies to history too; values missing from it are skipped.
+        const def: TypeDefinition = await mergedDefinition(db, t.id);
+        const primary = primaryPoint(def);
         const lastByIdentity = new Map<string, { id: string; values: Record<string, Scalar> }>();
         for (const row of rows) {
-          const def: TypeDefinition =
-            row.type_version === t.current_version
-              ? current
-              : await getDefinition(db, t.id, row.type_version);
-          const primary = primaryPoint(def);
           const idKey = identityKey(def, row.params);
           const prev = lastByIdentity.get(idKey);
           lastByIdentity.set(idKey, { id: row.id, values: row.results });
-          if (!prev || !primary || primary.type !== 'number' || primary.better === 'none') continue;
+          if (!prev) continue;
           const ev = evaluateRun(def, row.results, prev.values);
-          const p = ev.points.find((x) => x.key === primary.key);
-          const boundFailed = ev.points.some(
-            (x) => x.verdict === 'fail' && x.reasons.some((m) => m.includes('baseline')),
+          // A relative bound that failed wins; otherwise the headline moving the wrong way.
+          const failedRel = ev.points.find(
+            (x) =>
+              x.verdict === 'fail' && x.reasons.some((m) => m.includes('baseline')) && x.deltaPct !== null,
           );
-          if (!p || p.deltaPct === null) continue;
-          const worse = primary.better === 'higher' ? -p.deltaPct : p.deltaPct;
-          if (worse > req.query.regressionThreshold || boundFailed) {
-            regressions.push({
-              runId: row.id,
-              type: { slug: t.slug, name: t.name },
-              runAt: row.run_at,
-              params: row.params,
-              key: primary.key,
-              label: primary.label,
-              unit: primary.unit,
-              value: p.value as number,
-              baseline: p.baseline as number,
-              baselineRunId: prev.id,
-              deltaPct: p.deltaPct,
-              boundFailed,
-            });
+          let p = failedRel;
+          if (!p && primary && primary.type === 'number' && primary.better !== 'none') {
+            const cand = ev.points.find((x) => x.key === primary.key);
+            if (cand && cand.deltaPct !== null) {
+              const worse = primary.better === 'higher' ? -cand.deltaPct : cand.deltaPct;
+              if (worse > req.query.regressionThreshold) p = cand;
+            }
           }
+          if (!p || p.deltaPct === null) continue;
+          const dp = def.dataPoints.find((d) => d.key === p.key)!;
+          regressions.push({
+            runId: row.id,
+            type: { slug: t.slug, name: t.name },
+            runAt: row.run_at,
+            params: row.params,
+            key: dp.key,
+            label: dp.label,
+            unit: dp.unit,
+            value: p.value as number,
+            baseline: p.baseline as number,
+            baselineRunId: prev.id,
+            deltaPct: p.deltaPct,
+            boundFailed: p === failedRel,
+          });
         }
       }
       regressions.sort((a, b) => b.runAt.getTime() - a.runAt.getTime());

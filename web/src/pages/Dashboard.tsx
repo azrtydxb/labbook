@@ -10,7 +10,7 @@ import type { Dashboard, TypeSummary } from '../lib/types';
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: 'fail' }) {
   return (
-    <div className="min-w-[120px] flex-1 px-4 py-3">
+    <div className="bg-panel px-4 py-3">
       <div className={tone === 'fail' ? 'text-xl font-semibold text-fail' : 'text-xl font-semibold text-ink'}>
         {value}
       </div>
@@ -36,7 +36,7 @@ export function DashboardPage() {
         {d.counts.runs} runs across {d.counts.types} test types; {d.counts.runs7d} in the last 7 days.
       </PageHeader>
 
-      <div className="flex flex-wrap divide-x divide-rule rounded-xl border border-rule bg-panel">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-rule bg-rule sm:grid-cols-5">
         <Stat label="runs recorded" value={fmtNum(d.counts.runs)} />
         <Stat label="in the last 7 days" value={fmtNum(d.counts.runs7d)} />
         <Stat
@@ -51,7 +51,7 @@ export function DashboardPage() {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Panel
           title="Test types"
           subtitle="Headline data point over the last 30 runs; red dots are failing runs"
@@ -116,7 +116,7 @@ export function DashboardPage() {
         <div className="space-y-6">
           <Panel
             title="Regressions"
-            subtitle="Headline value worse than the previous comparable run by more than 3%"
+            subtitle="Against the previous comparable run: a relative bound failed, or the headline value got worse by more than 3%"
             bodyClass="p-0"
           >
             {d.regressions.length === 0 ? (
@@ -148,7 +148,7 @@ export function DashboardPage() {
                           {fmtPct(r.deltaPct)}
                         </div>
                         <div className="text-xs tabular-nums text-ink-3">
-                          {fmtNum(r.baseline)} → {fmtNum(r.value)} {r.unit}
+                          {r.label}: {fmtNum(r.baseline)} → {fmtNum(r.value)} {r.unit}
                         </div>
                       </div>
                     </Link>

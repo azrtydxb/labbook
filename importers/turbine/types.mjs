@@ -77,7 +77,7 @@ export const TYPES = {
     description: 'A cargo test run: host gate, GPU lab suites on novanas, or tests alongside a lab bench.',
     tags: ['turbine', 'tests'],
     definition: {
-      primary: 'passed',
+      primary: 'failed',
       parameters: [
         { key: 'tier', label: 'Tier', identity: true, description: 'host, gpu-lab or lab-bench' },
         { key: 'suite', label: 'Suite', identity: false },
@@ -145,7 +145,7 @@ export const TYPES = {
       dataPoints: [
         { key: 'verdict', label: 'Verdict', type: 'boolean', bounds: { expected: true } },
         { key: 'itl_p99_ms', label: 'ITL p99 under overload', unit: 'ms', better: 'lower' },
-        { key: 'calibration_itl_p99_ms', label: 'ITL p99 at calibration', unit: 'ms' },
+        { key: 'calibration_itl_p99_ms', label: 'ITL p99 at calibration', unit: 'ms' }, // gitleaks:allow (a data-point name, not a credential)
         { key: 'recovery_s', label: 'Recovery to GREEN', unit: 's', better: 'lower' },
         { key: 'ok_200', label: 'Responses 200', better: 'higher' },
         { key: 'queue_timeout', label: '503 queue_timeout' },

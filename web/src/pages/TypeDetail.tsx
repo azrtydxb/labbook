@@ -228,7 +228,7 @@ export function TypeDetailPage() {
         </span>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className={cx('grid grid-cols-1 gap-6', numeric.length > 1 && 'xl:grid-cols-2')}>
         {numeric.map((dp) => {
           const b = dp.bounds;
           const rel = [

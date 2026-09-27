@@ -250,6 +250,29 @@ function parseGoldenCell(s) {
   return { c1: judge(t) };
 }
 
+/**
+ * "hip_ops 15/15, tiny_model 21/21" reads passed/total; "full lab 509/0" reads passed/failed.
+ * A pair with total ≥ passed > 0 is passed-of-total, anything else passed/failed; summed.
+ */
+function suiteCounts(cell) {
+  let passed = 0;
+  let failed = 0;
+  let n = 0;
+  for (const m of clean(cell).matchAll(/(\d+)\/(\d+)/g)) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if (b >= a && a > 0) {
+      passed += a;
+      failed += b - a;
+    } else {
+      passed += a;
+      failed += b;
+    }
+    n++;
+  }
+  return n ? { passed, failed } : undefined;
+}
+
 function hostTests(cell, change) {
   const src = clean(cell ?? '') || '';
   const m = src.match(/(\d+)\/(\d+)/) ?? clean(change ?? '').match(/\((\d+)\/(\d+)[^)]*\)/);
@@ -483,7 +506,7 @@ function buildAll() {
             preserveText: true,
           });
         }
-        const gs = gpuSuites.match(/(\d+)\/(\d+)/);
+        const gs = suiteCounts(gpuSuites);
         if (gs && first) {
           runs.push({
             type: 'turbine-lab-test',
@@ -496,7 +519,7 @@ function buildAll() {
               ...(commit ? { commit } : {}),
               label: first.params.label,
             },
-            values: { passed: Number(gs[1]), failed: Number(gs[2]) },
+            values: gs,
             notes: `GPU suites from perf-log.md, ${sec.title}: ${gpuSuites}`,
             links: commit ? { commit } : {},
             sets: [setSlug],

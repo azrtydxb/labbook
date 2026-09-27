@@ -29,7 +29,7 @@ export function LoginPage() {
       <div className="relative hidden overflow-hidden bg-sidebar lg:block">
         <svg
           className="absolute inset-0 h-full w-full"
-          preserveAspectRatio="none"
+          preserveAspectRatio="xMidYMid slice"
           viewBox="0 0 600 800"
           aria-hidden
         >
@@ -39,9 +39,9 @@ export function LoginPage() {
             </pattern>
           </defs>
           <rect width="600" height="800" fill="url(#g)" />
-          <rect x="0" y="330" width="600" height="120" fill="#4cc38a" fillOpacity="0.08" />
+          <rect x="0" y="120" width="600" height="110" fill="#4cc38a" fillOpacity="0.08" />
           <path
-            d="M40 610 L110 596 L170 604 L230 560 L290 470 L350 452 L410 446 L470 392 L530 388 L570 384"
+            d="M40 370 L110 356 L170 364 L230 320 L290 230 L350 212 L410 206 L470 152 L530 148 L570 144"
             fill="none"
             stroke="#8a98ff"
             strokeWidth="3"
@@ -49,16 +49,16 @@ export function LoginPage() {
             strokeLinejoin="round"
           />
           {[
-            [40, 610],
-            [110, 596],
-            [170, 604],
-            [230, 560],
-            [290, 470],
-            [350, 452],
-            [410, 446],
-            [470, 392],
-            [530, 388],
-            [570, 384],
+            [40, 370],
+            [110, 356],
+            [170, 364],
+            [230, 320],
+            [290, 230],
+            [350, 212],
+            [410, 206],
+            [470, 152],
+            [530, 148],
+            [570, 144],
           ].map(([x, y]) => (
             <circle key={x} cx={x} cy={y} r="5" fill="#8a98ff" stroke="#14213d" strokeWidth="2.5" />
           ))}

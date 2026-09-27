@@ -29,6 +29,20 @@ export interface ChartSeries {
   points: ChartPoint[];
 }
 
+/** Round the axis to 1-2-5 steps so ticks read as 0, 200, 400… rather than 37.3, 237.3. */
+function niceScale(lo: number, hi: number, count = 5): { domain: [number, number]; ticks: number[] } {
+  let span = hi - lo;
+  if (span <= 0) span = Math.abs(hi) * 0.1 || 1;
+  const raw = span / count;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? 10 * mag;
+  const start = Math.floor((lo === hi ? lo - span / 2 : lo) / step) * step;
+  const end = Math.ceil((lo === hi ? hi + span / 2 : hi) / step) * step;
+  const ticks: number[] = [];
+  for (let v = start; v <= end + step / 2; v += step) ticks.push(Number(v.toPrecision(12)));
+  return { domain: [start, end], ticks };
+}
+
 function PointTooltip({ active, payload, dp }: { active?: boolean; payload?: any[]; dp: DataPointDef }) {
   const p = payload?.[0]?.payload as (ChartPoint & { series: string }) | undefined;
   if (!active || !p) return null;
@@ -88,8 +102,7 @@ export function MetricChart({
     ...(b.min !== undefined ? [b.min] : []),
     ...(b.max !== undefined ? [b.max] : []),
   );
-  const pad = (hi - lo || Math.abs(hi) || 1) * 0.08;
-  const yDomain: [number, number] = [lo - pad, hi + pad];
+  const { domain: yDomain, ticks: yTicks } = niceScale(lo, hi);
   const xs = all.map((p) => p.x);
   const xPad = xMode === 'sequence' ? 0.5 : Math.max(3600_000, (Math.max(...xs) - Math.min(...xs)) * 0.02);
   const xDomain: [number, number] = [Math.min(...xs) - xPad, Math.max(...xs) + xPad];
@@ -131,6 +144,7 @@ export function MetricChart({
               type="number"
               dataKey="y"
               domain={yDomain}
+              ticks={yTicks}
               allowDataOverflow
               tick={{ fill: 'var(--ink-3)', fontSize: 11 }}
               tickLine={false}

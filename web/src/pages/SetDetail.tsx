@@ -44,7 +44,14 @@ function TypeSection({
   onToggle: (id: string) => void;
 }) {
   const [xMode, setXMode] = useState<'sequence' | 'time'>('sequence');
-  const dps = def.dataPoints.filter((d) => d.type !== 'string').slice(0, 10);
+  // Headline first, then data points with bounds, then the rest: six columns at most.
+  const shown = def.dataPoints.filter((d) => d.type !== 'string');
+  const head = primaryPoint(def);
+  const dps = [
+    ...shown.filter((d) => d.key === head?.key),
+    ...shown.filter((d) => d.key !== head?.key && d.bounds),
+    ...shown.filter((d) => d.key !== head?.key && !d.bounds),
+  ].slice(0, 6);
   const numeric = def.dataPoints.filter((d) => d.type === 'number');
   const primary = primaryPoint(def);
   const [chartKey, setChartKey] = useState(primary?.key ?? numeric[0]?.key ?? '');
@@ -309,7 +316,7 @@ export function SetDetailPage() {
         {fmtDateTime(s.updatedAt)}.
       </PageHeader>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel>
           <MarkdownField
             label="Conclusion"

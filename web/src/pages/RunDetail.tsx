@@ -165,7 +165,7 @@ export function RunDetailPage() {
       </PageHeader>
       <ErrorNote error={statusMut.error} />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-6">
           <Panel
             title="Data points"
@@ -457,9 +457,12 @@ export function RunDetailPage() {
             <ErrorNote error={addToSet.error} />
           </Panel>
 
-          <Panel title="Change history" subtitle="Every change to this run after it was submitted">
+          <Panel
+            title="Other changes"
+            subtitle="Status, values, parameters and links changed after submission; notes and conclusion keep their own history"
+          >
             {other.length === 0 ? (
-              <p className="text-sm text-ink-3">Unchanged since submission.</p>
+              <p className="text-sm text-ink-3">No other field has changed since submission.</p>
             ) : (
               <ol className="space-y-2 text-xs">
                 {other.map((e) => (

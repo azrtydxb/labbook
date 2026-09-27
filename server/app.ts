@@ -71,8 +71,8 @@ export async function buildApp(
 
   registerAuth(app, db);
 
-  app.get('/healthz', { schema: { hide: true } }, async () => ({ ok: true }));
-  app.get('/readyz', { schema: { hide: true } }, async (_req, reply) => {
+  app.get('/healthz', { schema: { hide: true }, logLevel: 'warn' }, async () => ({ ok: true }));
+  app.get('/readyz', { schema: { hide: true }, logLevel: 'warn' }, async (_req, reply) => {
     try {
       await sql`select 1`.execute(db);
       return { ok: true };

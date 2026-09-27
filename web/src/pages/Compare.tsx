@@ -195,8 +195,9 @@ export function ComparePage() {
                   <td className="sticky left-0 z-10 bg-panel px-4 py-2">
                     <div className="font-medium text-ink">{d.label}</div>
                     <div className="text-xs text-ink-3">
-                      {d.unit}
-                      {d.better !== 'none' && ` · ${d.better} is better`}
+                      {[d.unit, d.better !== 'none' ? `${d.better} is better` : '']
+                        .filter(Boolean)
+                        .join(' · ')}
                     </div>
                   </td>
                   {runs.map((r, i) => {

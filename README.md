@@ -1,5 +1,7 @@
 # labbook
 
+Version 0.1.0.
+
 A lab book for test results. Define a **test type** once (its parameters, data points and pass
 bounds), then upload **runs** again and again from scripts, with notes and conclusions. Group runs
 into **sets**, chart every data point over time, compare runs side by side, and keep the raw logs
