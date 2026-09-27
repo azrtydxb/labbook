@@ -1,9 +1,12 @@
 # kw overrides. Kuvryn Sync renders the chart with this file as release `labbook` in the
 # `labbook` namespace. The namespace and the labbook-admin Secret exist beforehand.
 #
-# Pinned by digest; the setter comment lets image automation rewrite the line.
+# image.tag is written by CI after the image is pushed and proven pullable (as in
+# kuvryn-scout), so the tag kw runs is a fact in Git. Do not edit it by hand: the
+# next build overwrites it.
 image:
-  ref: 192.168.10.131/azrtydxb/labbook:main@sha256:4bfe46cd5bc2e2515fb4523619c4e987c83669dd0cefec2eb008f7158011ed49 # {"$imagepolicy": "labbook:labbook"}
+  repository: 192.168.10.131/azrtydxb/labbook
+  tag: 'sha-64ab6a2' # managed by CI
 
 replicas: 2
 

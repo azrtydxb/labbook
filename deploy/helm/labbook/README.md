@@ -41,8 +41,8 @@ chart keeps it (and the pod labels) exactly as the earlier kustomize overlay cre
 ## kw
 
 kw deploys this chart through Kuvryn Sync as release `labbook` in namespace `labbook` with
-[`values-kw.yaml`](values-kw.yaml); do not `helm install` it there by hand. Releases change
-only the `image.ref` line. Render locally with:
+[`values-kw.yaml`](values-kw.yaml); do not `helm install` it there by hand. CI writes each new
+`image.tag` there after the image is pushed; nobody edits it by hand. Render locally with:
 
 ```bash
 helm template labbook deploy/helm/labbook -n labbook -f deploy/helm/labbook/values-kw.yaml

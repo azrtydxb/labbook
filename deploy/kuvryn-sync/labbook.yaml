@@ -1,14 +1,8 @@
 # Kuvryn Sync keeps labbook on kw in step with main: the Repository follows the Git
-# branch, the ImagePolicy follows the `main` image tag and commits each new digest
-# into deploy/helm/labbook/values-kw.yaml, and the Application renders that chart.
+# branch and the Application renders deploy/helm/labbook with values-kw.yaml. CI
+# writes each new image tag into values-kw.yaml after the image is pushed (as in
+# kuvryn-scout), so a green build on main rolls out by itself.
 # Applied once by hand:  kubectl --context kw apply -f deploy/kuvryn-sync/labbook.yaml
-#
-# Image write-back needs push access. It stays off until the Secret below exists
-# (a fine-grained token with Contents: read and write on azrtydxb/labbook only):
-#   read -rs T && kubectl --context kw -n labbook create secret generic labbook-git \
-#     --from-literal=username=x-access-token --from-literal=token="$T" && unset T
-#   kubectl --context kw -n labbook label secret labbook-git sync.kuvryn.io/git-credentials=true
-# then uncomment spec.imageUpdate on the Repository and apply again.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -78,26 +72,6 @@ spec:
     url: https://github.com/azrtydxb/labbook.git
     revision: main
   pollInterval: 60s
-  # imageUpdate:
-  #   secretRef:
-  #     name: labbook-git
-  #   branch: main
-  #   path: deploy/helm/labbook
-  #   authorName: kuvryn-sync
-  #   authorEmail: kuvryn-sync@kw.watteel.lab
----
-apiVersion: sync.kuvryn.io/v1alpha1
-kind: ImagePolicy
-metadata:
-  name: labbook
-  namespace: labbook
-spec:
-  # The pull address the nodes use; CI pushes the same repository via :5000.
-  image: 192.168.10.131/azrtydxb/labbook
-  interval: 2m
-  policy:
-    digest:
-      tag: main
 ---
 apiVersion: sync.kuvryn.io/v1alpha1
 kind: Application

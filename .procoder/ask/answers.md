@@ -1,6 +1,6 @@
 # What a human decided
 
-Written 2026-09-27 07:58 UTC. procoder reads this
+Written 2026-09-27 08:03 UTC. procoder reads this
 file to avoid asking a question twice; edit an answer here to change what
 it believes. Reword the question and it will be asked again.
 
@@ -69,6 +69,17 @@ Question: Target zones: effect of missing a target
 - Per target: each target says whether it is enforced or informational
 
 Answer: Separate target grade — on target / below target shown on runs and charts; pass/fail unchanged (user, 2026-09-27)
+
+## [decision] decisions.md
+
+Key: cd8c15ead87f
+Question: Kuvryn Sync controller trust of the cluster CA (for ImagePolicy registry scans)
+
+- Mount the cluster CA into kuvryn-sync-controller-manager and set SSL_CERT_FILE (affects every app Kuvryn Sync manages)
+- Add a CA setting to ImagePolicy in kuvryn-sync itself (code change in azrtydxb/kuvryn-sync, then upgrade)
+- Leave it: image bumps stay a manual commit of the digest
+
+Answer: Add a CA setting to ImagePolicy in azrtydxb/kuvryn-sync, release and upgrade (user, 2026-09-27)
 
 ## [decision] decisions.md
 

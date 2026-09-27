@@ -39,3 +39,9 @@ Answered 2026-09-27: named baseline groups; bounds stay on the previous run (bas
 - You create a fine-grained GitHub token (Contents: read/write on azrtydxb/labbook) and load it with a kubectl command
 - I create a write-enabled deploy key with gh and store its private half only in the cluster Secret
 - No write-back: Kuvryn Sync syncs Git only; image bumps stay a manual commit of the digest
+
+## Kuvryn Sync controller trust of the cluster CA (for ImagePolicy registry scans)
+
+- Mount the cluster CA into kuvryn-sync-controller-manager and set SSL_CERT_FILE (affects every app Kuvryn Sync manages)
+- Add a CA setting to ImagePolicy in kuvryn-sync itself (code change in azrtydxb/kuvryn-sync, then upgrade)
+- Leave it: image bumps stay a manual commit of the digest

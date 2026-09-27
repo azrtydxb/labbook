@@ -160,9 +160,9 @@ Builds and tests run on the cluster, not on a laptop:
 
 - **CI** (`.github/workflows/ci.yml`, `azrtydxb` org runners): `arc-azrtydxb` runs format check,
   ESLint, typecheck, Vitest (with a Postgres service; the API suite needs `DATABASE_URL`) and the
-  build; `arc-azrtydxb-publish` builds the arm64 image and pushes
-  `192.168.10.131:5000/azrtydxb/labbook:sha-<short>` (and `:main`). The run summary prints the
-  digest.
+  build; `arc-azrtydxb-publish` builds the arm64 image, pushes
+  `192.168.10.131:5000/azrtydxb/labbook:sha-<short>` (and `:main`), checks the pull name resolves,
+  and on `main` records the tag in `deploy/helm/labbook/values-kw.yaml` for Kuvryn Sync.
 - **Inner loop**: `~/Development/internal-lab/scripts/dev-build.sh` from this directory builds on
   the kw BuildKit and pushes a `dev-<user>-<sha>` tag.
 
@@ -181,11 +181,11 @@ kubectl --context kw apply -f deploy/kuvryn-sync/labbook.yaml
 kubectl --context kw -n labbook rollout status deploy/labbook
 ```
 
-Releases are GitOps: Kuvryn Sync renders the Helm chart in [deploy/helm/labbook](deploy/helm/labbook/README.md)
-with `values-kw.yaml` from `main` and applies it. Its ImagePolicy follows the `main` image tag and
-commits each new digest to the `image.ref` line of `values-kw.yaml`, so a merged commit rolls out by
-itself once CI has pushed the image. `deploy/kw` (kustomize) is the previous, manual path, kept until
-the Helm route has run for a while.
+Releases are GitOps, as for kuvryn-scout: Kuvryn Sync renders the Helm chart in
+[deploy/helm/labbook](deploy/helm/labbook/README.md) with `values-kw.yaml` from `main`. After CI has
+pushed an image and proven it pullable, it commits `Deploy sha-<short> to kw [skip ci]`, writing that
+tag into `values-kw.yaml`; Kuvryn Sync then rolls it out. So a green build on `main` deploys itself.
+`deploy/kw` (kustomize) is the previous, manual path, kept until the Helm route has run for a while.
 
 `*.kw.watteel.lab` already resolves to the ingress-nginx LoadBalancer (192.168.10.120), so no DNS
 change is needed; cert-manager's `cluster-ca` issues `labbook-tls`.

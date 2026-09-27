@@ -3,7 +3,7 @@ fullnameOverride: ''
 
 image:
   # -- Full reference, e.g. registry/labbook:main@sha256:<digest>. Takes precedence over
-  # repository/tag/digest, and fits on one line for an image-automation setter comment.
+  # repository/tag/digest.
   ref: ''
   repository: ''
   # -- Defaults to the chart's appVersion when neither tag nor digest is set.
