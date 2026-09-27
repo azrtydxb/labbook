@@ -7,6 +7,7 @@ import { evaluateRun, identityKey, primaryPoint } from '../../shared/evaluate.js
 import type { Scalar, TypeDefinition } from '../../shared/types.js';
 import { listRuns } from '../services/runs.js';
 import { mergedDefinition } from '../services/testTypes.js';
+import { DashboardSchema, errors } from '../schemas.js';
 
 export function dashboardRoutes(app: FastifyInstance, db: Database): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -15,8 +16,10 @@ export function dashboardRoutes(app: FastifyInstance, db: Database): void {
     '/api/v1/dashboard',
     {
       schema: {
+        operationId: 'getDashboard',
         tags: ['meta'],
         summary: 'Home dashboard: counts, recent runs, failing runs and regressions',
+        response: { 200: DashboardSchema, ...errors() },
         querystring: z.object({
           regressionThreshold: z.coerce
             .number()

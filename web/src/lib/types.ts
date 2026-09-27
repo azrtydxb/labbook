@@ -1,7 +1,8 @@
+import type { TargetResult } from '../../../shared/evaluate';
 import type { RunEvaluation, RunStatus, Scalar, TypeDefinition } from '../../../shared/types';
 
-export type { RunEvaluation, RunStatus, Scalar, TypeDefinition };
-export type { DataPointDef, ParameterDef, Bounds } from '../../../shared/types';
+export type { RunEvaluation, RunStatus, Scalar, TypeDefinition, TargetResult };
+export type { DataPointDef, ParameterDef, Bounds, Target } from '../../../shared/types';
 
 export interface User {
   id: string;
@@ -36,6 +37,10 @@ export interface Run {
   conclusion: string;
   links: Links;
   sets: { slug: string; name: string }[];
+  /** Pinned baselines this run is a member of. */
+  baselineOf: { slug: string; name: string }[];
+  /** Overall target grade: off if any target is missed, on if all measurable ones are met. */
+  target: 'on' | 'off' | 'none';
   attachmentCount: number;
 }
 
@@ -73,6 +78,53 @@ export interface RunDetail extends Omit<Run, 'type'> {
   } | null;
   attachments: Attachment[];
   edits: Edit[];
+  /** Every pinned baseline of the type with a member matching this run (never the run itself). */
+  baselines: BaselineComparison[];
+  /** Every target of the current definition, graded for this run (informational). */
+  targets: TargetResult[];
+}
+
+export interface BaselineMember {
+  runId: string;
+  /** The member's params restricted to the baseline's matchKeys. */
+  match: Record<string, string>;
+  runAt: string;
+  externalId: string | null;
+  /** params.label ?? externalId ?? '#seq' */
+  label: string;
+  params: Record<string, string>;
+  values: Record<string, Scalar>;
+}
+
+/** A named reference ("what we must beat") with one member run per match tuple. */
+export interface Baseline {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  matchKeys: string[];
+  createdAt: string;
+  updatedAt: string;
+  members: BaselineMember[];
+}
+
+export interface BaselineComparison {
+  slug: string;
+  name: string;
+  runId: string;
+  runAt: string;
+  label: string;
+  match: Record<string, string>;
+  points: {
+    key: string;
+    value: Scalar | undefined;
+    baseline: Scalar | undefined;
+    delta: number | null;
+    deltaPct: number | null;
+    /** value / baseline; null when not numeric or the baseline is 0. */
+    ratio: number | null;
+    improved: boolean | null;
+  }[];
 }
 
 export interface TypeSummary {

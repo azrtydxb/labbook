@@ -125,7 +125,27 @@ export interface AttachmentsTable {
   uploaded_by: string | null;
 }
 
+export interface BaselinesTable {
+  id: Generated<string>;
+  test_type_id: string;
+  slug: string;
+  name: string;
+  description: Generated<string>;
+  match_keys: ColumnType<string[], string[] | undefined, string[]>;
+  created_at: CreatedAt;
+  updated_at: Timestamp;
+  created_by: string | null;
+}
+
+export interface BaselineRunsTable {
+  baseline_id: string;
+  run_id: string;
+  added_at: CreatedAt;
+}
+
 export interface DB {
+  baselines: BaselinesTable;
+  baseline_runs: BaselineRunsTable;
   users: UsersTable;
   sessions: SessionsTable;
   api_tokens: ApiTokensTable;

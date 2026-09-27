@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Download, GitCompareArrows, Pencil } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { BaselinesPanel, useBaselines } from '../components/Baselines';
 import { Markdown } from '../components/Markdown';
 import { MetricChart, type ChartSeries } from '../components/MetricChart';
 import { RunsTable } from '../components/RunsTable';
@@ -9,6 +10,7 @@ import { Button, ErrorNote, Label, PageHeader, Panel, Select, Spinner, Tag, cx }
 import { api, qs } from '../lib/api';
 import { fmtDate } from '../lib/format';
 import type { Run, TypeDetail } from '../lib/types';
+import { identityKey, isBetter } from '../../../shared/evaluate';
 
 export function TypeDetailPage() {
   const { slug = '' } = useParams();
@@ -29,6 +31,16 @@ export function TypeDetailPage() {
   const [xMode, setXMode] = useState<'time' | 'sequence'>('sequence');
   const [status, setStatus] = useState<string>('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const baselines = useBaselines(slug);
+  // Plot as % of a pinned baseline; kept in the URL so the view can be shared.
+  const [sp, setSp] = useSearchParams();
+  const relParam = sp.get('rel') ?? '';
+  const setRel = (v: string) => {
+    const n = new URLSearchParams(sp);
+    if (v) n.set('rel', v);
+    else n.delete('rel');
+    setSp(n, { replace: true });
+  };
 
   const def = type.data?.merged;
   const all = useMemo(() => runs.data?.runs ?? [], [runs.data]);
@@ -43,6 +55,27 @@ export function TypeDetailPage() {
       m.set(p.key, vs);
     }
     return m;
+  }, [all, def]);
+
+  // For `best` targets: per data point, the best value of the earlier comparable runs.
+  const bestBefore = useMemo(() => {
+    const out = new Map<string, Map<string, number>>();
+    if (!def) return out;
+    for (const dp of def.dataPoints) {
+      if (dp.type !== 'number' || dp.better === 'none' || !dp.targets?.some((t) => t.ref === 'best'))
+        continue;
+      const best = new Map<string, number>();
+      const before = new Map<string, number>();
+      for (const r of all) {
+        const k = identityKey(def, r.params);
+        const b = best.get(k);
+        if (b !== undefined) before.set(r.id, b);
+        const v = r.values[dp.key];
+        if (typeof v === 'number' && (b === undefined || isBetter(dp.better, v, b))) best.set(k, v);
+      }
+      out.set(dp.key, before);
+    }
+    return out;
   }, [all, def]);
 
   const defaultGroup = useMemo(() => {
@@ -66,6 +99,8 @@ export function TypeDetailPage() {
   const t = type.data!;
   const d = def!;
   const numeric = d.dataPoints.filter((p) => p.type === 'number');
+  const bls = baselines.data ?? [];
+  const pctOf = bls.some((b) => b.slug === relParam) ? relParam : '';
 
   const seriesFor = (key: string): ChartSeries[] => {
     const groups = new Map<string, ChartSeries>();
@@ -86,6 +121,7 @@ export function TypeDetailPage() {
         status: r.status,
         params: r.params,
         commit: r.links.commit ?? r.params.commit,
+        best: bestBefore.get(key)?.get(r.id),
       });
     });
     return [...groups.values()].sort((a, b) => a.colorIndex - b.colorIndex);
@@ -221,6 +257,19 @@ export function TypeDetailPage() {
             ))}
           </div>
         </div>
+        {bls.length > 0 && (
+          <label className="w-52">
+            <Label>Y axis</Label>
+            <Select value={pctOf} onChange={(e) => setRel(e.target.value)}>
+              <option value="">Absolute</option>
+              {bls.map((b) => (
+                <option key={b.slug} value={b.slug}>
+                  % of {b.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+        )}
         <span className="ml-auto self-center text-xs text-ink-3">
           {filtered.length} of {all.length} runs
           {filtered.length > 0 &&
@@ -243,7 +292,13 @@ export function TypeDetailPage() {
               title={
                 <>
                   {dp.label}
-                  {dp.unit && <span className="ml-1.5 text-sm font-normal text-ink-3">{dp.unit}</span>}
+                  {pctOf ? (
+                    <span className="ml-1.5 text-sm font-normal text-ink-3">
+                      % of {bls.find((x) => x.slug === pctOf)?.name}
+                    </span>
+                  ) : (
+                    dp.unit && <span className="ml-1.5 text-sm font-normal text-ink-3">{dp.unit}</span>
+                  )}
                 </>
               }
               subtitle={[
@@ -253,7 +308,13 @@ export function TypeDetailPage() {
                 .filter(Boolean)
                 .join(' · ')}
             >
-              <MetricChart dp={dp} series={seriesFor(dp.key)} xMode={xMode} />
+              <MetricChart
+                dp={dp}
+                series={seriesFor(dp.key)}
+                xMode={xMode}
+                baselines={bls}
+                relativeTo={pctOf || undefined}
+              />
             </Panel>
           );
         })}
@@ -282,6 +343,8 @@ export function TypeDetailPage() {
           maxValueCols={8}
         />
       </Panel>
+
+      <BaselinesPanel typeSlug={slug} definition={d} selected={selected} />
 
       <Panel title="Schema versions" subtitle="Runs keep the version they were recorded under">
         <ol className="space-y-1 text-sm">

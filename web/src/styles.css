@@ -23,6 +23,9 @@
   --sidebar-active: #25355c;
   --band: rgba(26, 138, 90, 0.09);
   --band-edge: rgba(26, 138, 90, 0.45);
+  /* Target zones: informational, so a lime tint distinct from the bounds band. */
+  --target: rgba(122, 160, 18, 0.14);
+  --target-edge: rgba(104, 140, 10, 0.6);
 
   --pass: #16794f;
   --pass-soft: #e3f3ec;
@@ -63,6 +66,8 @@
     --sidebar-active: #1c2640;
     --band: rgba(64, 196, 140, 0.1);
     --band-edge: rgba(64, 196, 140, 0.5);
+    --target: rgba(186, 214, 72, 0.12);
+    --target-edge: rgba(186, 214, 72, 0.55);
     --pass: #4cc38a;
     --pass-soft: #12302a;
     --fail: #ff7b7b;
@@ -100,6 +105,8 @@
   --sidebar-active: #1c2640;
   --band: rgba(64, 196, 140, 0.1);
   --band-edge: rgba(64, 196, 140, 0.5);
+  --target: rgba(186, 214, 72, 0.12);
+  --target-edge: rgba(186, 214, 72, 0.55);
   --pass: #4cc38a;
   --pass-soft: #12302a;
   --fail: #ff7b7b;

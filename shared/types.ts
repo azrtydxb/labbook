@@ -30,6 +30,24 @@ export interface Bounds {
   expected?: boolean | string;
 }
 
+/**
+ * A zone a data point should land in to count as good. Informational: it grades a
+ * run "on target" / "below target" but never changes pass/fail.
+ * - absolute: min/max are values in the data point's unit.
+ * - baseline: min/max are ratios of the matching member of a pinned baseline
+ *   (0.75 = at least 75% of vLLM).
+ * - best: min/max are ratios of the best earlier comparable run (same identity
+ *   parameters), best by the data point's `better` (0.97 = within 3% of the best).
+ */
+export interface Target {
+  ref: 'absolute' | 'baseline' | 'best';
+  /** Baseline slug, for ref=baseline. */
+  baseline?: string;
+  min?: number;
+  max?: number;
+  label?: string;
+}
+
 export interface DataPointDef {
   key: string;
   label: string;
@@ -38,6 +56,7 @@ export interface DataPointDef {
   better: Better;
   description: string;
   bounds?: Bounds;
+  targets?: Target[];
 }
 
 export interface TypeDefinition {

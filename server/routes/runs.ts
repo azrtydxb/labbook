@@ -19,6 +19,17 @@ import {
   type RunFilter,
 } from '../services/runs.js';
 import { getDefinition, mergedDefinition } from '../services/testTypes.js';
+import {
+  AttachmentUploadSchema,
+  ChangedSchema,
+  errors,
+  OkSchema,
+  RunDetailSchema,
+  RunListSchema,
+  RunSubmitResultSchema,
+  RunSummarySchema,
+  TypeDefinitionOut,
+} from '../schemas.js';
 
 const ListQuery = z
   .object({
@@ -70,7 +81,17 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
 
   r.get(
     '/api/v1/runs',
-    { schema: { tags: ['runs'], summary: 'Query runs', querystring: ListQuery } },
+    {
+      schema: {
+        operationId: 'listRuns',
+        tags: ['runs'],
+        summary: 'Query runs, newest first by default',
+        description:
+          'Filter on parameters with extra query keys `param.<key>=<value>`, e.g. `param.model=llama`.',
+        querystring: ListQuery,
+        response: { 200: RunListSchema, ...errors() },
+      },
+    },
     async (req) => {
       requireUser(req);
       return listRuns(db, toFilter(req.query));
@@ -82,9 +103,15 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
     {
       bodyLimit: cfg.maxBodyBytes,
       schema: {
+        operationId: 'submitRun',
         tags: ['runs'],
         summary: 'Submit a run (upsert by type + externalId)',
+        description:
+          'The test type must exist. Values are checked against its definition; the status is computed ' +
+          'from the bounds and the baseline unless given. Re-submitting the same externalId updates the ' +
+          'run (200) instead of creating one (201); every change lands in the edit log.',
         body: RunInputSchema,
+        response: { 200: RunSubmitResultSchema, 201: RunSubmitResultSchema, ...errors(404) },
       },
     },
     async (req, reply) => {
@@ -105,9 +132,30 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
     {
       bodyLimit: cfg.maxBodyBytes,
       schema: {
+        operationId: 'submitRuns',
         tags: ['runs'],
         summary: 'Submit many runs; each is its own transaction and reports its own result',
         body: z.object({ runs: z.array(RunInputSchema).min(1).max(1000) }),
+        response: {
+          200: z.object({
+            created: z.number().int(),
+            updated: z.number().int(),
+            failed: z.number().int(),
+            results: z.array(
+              z.object({
+                index: z.number().int().describe('Position in the submitted array'),
+                ok: z.boolean(),
+                id: z.uuid().optional(),
+                created: z.boolean().optional(),
+                status: RunSubmitResultSchema.shape.status.optional(),
+                changed: z.array(z.string()).optional(),
+                error: z.string().optional(),
+                details: z.unknown().optional(),
+              }),
+            ),
+          }),
+          ...errors(),
+        },
       },
     },
     async (req) => {
@@ -141,9 +189,11 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
     '/api/v1/runs/:id',
     {
       schema: {
+        operationId: 'getRun',
         tags: ['runs'],
-        summary: 'A run with its evaluation against bounds and baseline, attachments and edit history',
+        summary: 'A run with its evaluation, pinned-baseline comparisons, attachments and edit history',
         params: IdParams,
+        response: { 200: RunDetailSchema, ...errors(404) },
       },
     },
     async (req) => {
@@ -156,10 +206,12 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
     '/api/v1/runs/:id',
     {
       schema: {
+        operationId: 'updateRun',
         tags: ['runs'],
         summary: 'Edit notes, conclusion, status, links, params or values (every change is logged)',
         params: IdParams,
         body: RunPatchSchema,
+        response: { 200: ChangedSchema, ...errors(404) },
       },
     },
     async (req) => {
@@ -171,7 +223,15 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
 
   r.delete(
     '/api/v1/runs/:id',
-    { schema: { tags: ['runs'], summary: 'Delete a run (admin)', params: IdParams } },
+    {
+      schema: {
+        operationId: 'deleteRun',
+        tags: ['runs'],
+        summary: 'Delete a run with its attachments (admin)',
+        params: IdParams,
+        response: { 200: OkSchema, ...errors(403, 404) },
+      },
+    },
     async (req) => {
       requireAdmin(req);
       const res = await db.deleteFrom('runs').where('id', '=', req.params.id).executeTakeFirst();
@@ -186,10 +246,12 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
     '/api/v1/runs/:id/attachments',
     {
       schema: {
+        operationId: 'uploadAttachments',
         tags: ['attachments'],
         summary: 'Upload attachments (multipart/form-data, one or more files; same filename replaces)',
         params: IdParams,
         consumes: ['multipart/form-data'],
+        response: { 201: z.object({ attachments: z.array(AttachmentUploadSchema) }), ...errors(404) },
       },
     },
     async (req, reply) => {
@@ -234,9 +296,13 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
       '/api/v1/runs/:id/attachments/:filename',
       {
         schema: {
+          operationId: 'putAttachment',
           tags: ['attachments'],
           summary: 'Upload one attachment as the raw request body (curl --data-binary @file)',
+          description: 'Any content type; an existing attachment with the same filename is replaced.',
           params: IdParams.extend({ filename: z.string().min(1).max(255) }),
+          consumes: ['application/octet-stream'],
+          response: { 201: AttachmentUploadSchema, ...errors(404) },
         },
       },
       async (req, reply) => {
@@ -270,6 +336,7 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
     '/api/v1/attachments/:id',
     {
       schema: {
+        operationId: 'downloadAttachment',
         tags: ['attachments'],
         summary: 'Download an attachment (inline=1 serves text as text/plain for viewing)',
         params: IdParams,
@@ -300,7 +367,15 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
 
   r.delete(
     '/api/v1/attachments/:id',
-    { schema: { tags: ['attachments'], summary: 'Delete an attachment', params: IdParams } },
+    {
+      schema: {
+        operationId: 'deleteAttachment',
+        tags: ['attachments'],
+        summary: 'Delete an attachment',
+        params: IdParams,
+        response: { 200: OkSchema, ...errors(404) },
+      },
+    },
     async (req) => {
       requireUser(req);
       const res = await db.deleteFrom('attachments').where('id', '=', req.params.id).executeTakeFirst();
@@ -315,8 +390,11 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
     '/api/v1/export',
     {
       schema: {
+        operationId: 'exportRuns',
         tags: ['export'],
         summary: 'Export runs as CSV or JSON (same filters as GET /runs; limit defaults to 10000)',
+        description:
+          'Filter on parameters with extra query keys `param.<key>=<value>`, e.g. `param.model=llama`.',
         querystring: ListQuery.extend({
           format: z.enum(['csv', 'json']).default('csv'),
           limit: z.coerce.number().int().min(1).max(100000).default(10000),
@@ -349,9 +427,17 @@ export function runRoutes(app: FastifyInstance, db: Database, cfg: Config): void
     '/api/v1/compare',
     {
       schema: {
+        operationId: 'compareRuns',
         tags: ['runs'],
         summary: 'Several runs with their definitions, for side-by-side comparison',
-        querystring: z.object({ ids: z.string().describe('Comma-separated run ids (2-12)') }),
+        querystring: z.object({ ids: z.string().describe('Comma-separated run ids (1-12)') }),
+        response: {
+          200: z.object({
+            runs: z.array(RunSummarySchema).describe('In the order of ids; unknown ids are skipped'),
+            definitions: z.record(z.string(), TypeDefinitionOut).describe('Keyed by <type slug>@<version>'),
+          }),
+          ...errors(),
+        },
       },
     },
     async (req) => {

@@ -137,6 +137,37 @@ const migrations: Record<string, Migration> = {
       `.execute(db);
     },
   },
+  // Pinned baselines: named reference groups per test type (e.g. "vLLM-ROCm 0.23.0"),
+  // one member run per combination of the match keys (e.g. one per model).
+  '0002_baselines': {
+    async up(db: Kysely<any>) {
+      await sql`
+        create table baselines (
+          id uuid primary key default gen_random_uuid(),
+          test_type_id uuid not null references test_types(id) on delete cascade,
+          slug text not null,
+          name text not null,
+          description text not null default '',
+          match_keys text[] not null default '{}',
+          created_at timestamptz not null default now(),
+          updated_at timestamptz not null default now(),
+          created_by uuid references users(id) on delete set null,
+          unique (test_type_id, slug)
+        );
+
+        create table baseline_runs (
+          baseline_id uuid not null references baselines(id) on delete cascade,
+          run_id uuid not null references runs(id) on delete cascade,
+          added_at timestamptz not null default now(),
+          primary key (baseline_id, run_id)
+        );
+        create index baseline_runs_run_idx on baseline_runs(run_id);
+      `.execute(db);
+    },
+    async down(db: Kysely<any>) {
+      await sql`drop table if exists baseline_runs, baselines`.execute(db);
+    },
+  },
 };
 
 class CodeMigrationProvider implements MigrationProvider {

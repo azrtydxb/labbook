@@ -8,6 +8,14 @@ import { SLUG_RE } from '../../shared/definition.js';
 import type { TypeDefinition } from '../../shared/types.js';
 import { linkRunToSets, listRuns } from '../services/runs.js';
 import { mergedDefinition } from '../services/testTypes.js';
+import {
+  ChangedSchema,
+  errors,
+  OkSchema,
+  SetDetailSchema,
+  SetRefResultSchema,
+  SetSummarySchema,
+} from '../schemas.js';
 
 const SetBody = z.object({
   name: z.string().min(1).max(200),
@@ -34,62 +42,77 @@ async function recordEdit(db: Database, id: string, field: string, o: string, n:
 export function setRoutes(app: FastifyInstance, db: Database): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
-  r.get('/api/v1/sets', { schema: { tags: ['sets'], summary: 'List sets' } }, async (req) => {
-    requireUser(req);
-    const sets = await db
-      .selectFrom('sets as s')
-      .leftJoin('set_runs as sr', 'sr.set_id', 's.id')
-      .leftJoin('runs as r', 'r.id', 'sr.run_id')
-      .select([
-        's.id',
-        's.slug',
-        's.name',
-        's.description',
-        's.conclusion',
-        's.created_at',
-        's.updated_at',
-        (eb) => eb.fn.count<number>('r.id').as('runs'),
-        (eb) => eb.fn.count<number>('r.id').filterWhere('r.status', 'in', ['fail', 'error']).as('failing'),
-        (eb) => eb.fn.max('r.run_at').as('last_run_at'),
-        (eb) => eb.fn.min('r.run_at').as('first_run_at'),
-      ])
-      .groupBy('s.id')
-      .orderBy('s.updated_at', 'desc')
-      .execute();
-    const typeRows = await db
-      .selectFrom('set_runs as sr')
-      .innerJoin('runs as r', 'r.id', 'sr.run_id')
-      .innerJoin('test_types as t', 't.id', 'r.test_type_id')
-      .select(['sr.set_id', 't.slug', 't.name'])
-      .distinct()
-      .execute();
-    return {
-      sets: sets
-        .map((s) => ({
-          id: s.id,
-          slug: s.slug,
-          name: s.name,
-          description: s.description,
-          hasConclusion: s.conclusion.trim().length > 0,
-          conclusion: s.conclusion,
-          runCount: Number(s.runs),
-          failingCount: Number(s.failing),
-          firstRunAt: s.first_run_at,
-          lastRunAt: s.last_run_at,
-          createdAt: s.created_at,
-          updatedAt: s.updated_at,
-          types: typeRows.filter((t) => t.set_id === s.id).map((t) => ({ slug: t.slug, name: t.name })),
-        }))
-        .sort((a, b) => String(b.lastRunAt ?? b.updatedAt).localeCompare(String(a.lastRunAt ?? a.updatedAt))),
-    };
-  });
+  r.get(
+    '/api/v1/sets',
+    {
+      schema: {
+        operationId: 'listSets',
+        tags: ['sets'],
+        summary: 'List sets, most recently active first',
+        response: { 200: z.object({ sets: z.array(SetSummarySchema) }), ...errors() },
+      },
+    },
+    async (req) => {
+      requireUser(req);
+      const sets = await db
+        .selectFrom('sets as s')
+        .leftJoin('set_runs as sr', 'sr.set_id', 's.id')
+        .leftJoin('runs as r', 'r.id', 'sr.run_id')
+        .select([
+          's.id',
+          's.slug',
+          's.name',
+          's.description',
+          's.conclusion',
+          's.created_at',
+          's.updated_at',
+          (eb) => eb.fn.count<number>('r.id').as('runs'),
+          (eb) => eb.fn.count<number>('r.id').filterWhere('r.status', 'in', ['fail', 'error']).as('failing'),
+          (eb) => eb.fn.max('r.run_at').as('last_run_at'),
+          (eb) => eb.fn.min('r.run_at').as('first_run_at'),
+        ])
+        .groupBy('s.id')
+        .orderBy('s.updated_at', 'desc')
+        .execute();
+      const typeRows = await db
+        .selectFrom('set_runs as sr')
+        .innerJoin('runs as r', 'r.id', 'sr.run_id')
+        .innerJoin('test_types as t', 't.id', 'r.test_type_id')
+        .select(['sr.set_id', 't.slug', 't.name'])
+        .distinct()
+        .execute();
+      return {
+        sets: sets
+          .map((s) => ({
+            id: s.id,
+            slug: s.slug,
+            name: s.name,
+            description: s.description,
+            hasConclusion: s.conclusion.trim().length > 0,
+            conclusion: s.conclusion,
+            runCount: Number(s.runs),
+            failingCount: Number(s.failing),
+            firstRunAt: s.first_run_at,
+            lastRunAt: s.last_run_at,
+            createdAt: s.created_at,
+            updatedAt: s.updated_at,
+            types: typeRows.filter((t) => t.set_id === s.id).map((t) => ({ slug: t.slug, name: t.name })),
+          }))
+          .sort((a, b) =>
+            String(b.lastRunAt ?? b.updatedAt).localeCompare(String(a.lastRunAt ?? a.updatedAt)),
+          ),
+      };
+    },
+  );
 
   r.post(
     '/api/v1/sets',
     {
       schema: {
+        operationId: 'createSet',
         tags: ['sets'],
-        summary: 'Create a set',
+        summary: 'Create a set (the slug is derived from the name unless given)',
+        response: { 201: SetRefResultSchema, ...errors(409) },
         body: SetBody.extend({ slug: z.string().regex(SLUG_RE).optional() }),
       },
     },
@@ -119,8 +142,14 @@ export function setRoutes(app: FastifyInstance, db: Database): void {
     '/api/v1/sets/:slug',
     {
       schema: {
+        operationId: 'upsertSet',
         tags: ['sets'],
         summary: 'Create or update a set (idempotent)',
+        response: {
+          200: SetRefResultSchema.extend({ created: z.boolean() }),
+          201: SetRefResultSchema.extend({ created: z.boolean() }),
+          ...errors(),
+        },
         params: SlugParams,
         body: SetBody,
       },
@@ -161,8 +190,10 @@ export function setRoutes(app: FastifyInstance, db: Database): void {
     '/api/v1/sets/:slug',
     {
       schema: {
+        operationId: 'getSet',
         tags: ['sets'],
         summary: 'A set with all its runs, the definitions of their types, and its edit history',
+        response: { 200: SetDetailSchema, ...errors(404) },
         params: SlugParams,
       },
     },
@@ -211,8 +242,10 @@ export function setRoutes(app: FastifyInstance, db: Database): void {
     '/api/v1/sets/:slug',
     {
       schema: {
+        operationId: 'updateSet',
         tags: ['sets'],
         summary: 'Edit name, description, conclusion or baseline run (changes are logged)',
+        response: { 200: ChangedSchema, ...errors(404) },
         params: SlugParams,
         body: z
           .object({
@@ -263,8 +296,10 @@ export function setRoutes(app: FastifyInstance, db: Database): void {
     '/api/v1/sets/:slug/runs',
     {
       schema: {
+        operationId: 'addSetRuns',
         tags: ['sets'],
         summary: 'Add runs to a set, by id or by (type, externalId)',
+        response: { 200: z.object({ added: z.number().int() }), ...errors(404) },
         params: SlugParams,
         body: z.object({
           runIds: z.array(z.uuid()).max(5000).default([]),
@@ -311,8 +346,10 @@ export function setRoutes(app: FastifyInstance, db: Database): void {
     '/api/v1/sets/:slug/runs/:runId',
     {
       schema: {
+        operationId: 'removeSetRun',
         tags: ['sets'],
         summary: 'Remove a run from a set',
+        response: { 200: OkSchema, ...errors(404) },
         params: SlugParams.extend({ runId: z.uuid() }),
       },
     },
@@ -344,7 +381,15 @@ export function setRoutes(app: FastifyInstance, db: Database): void {
 
   r.delete(
     '/api/v1/sets/:slug',
-    { schema: { tags: ['sets'], summary: 'Delete a set; its runs stay (admin)', params: SlugParams } },
+    {
+      schema: {
+        operationId: 'deleteSet',
+        tags: ['sets'],
+        summary: 'Delete a set; its runs stay (admin)',
+        params: SlugParams,
+        response: { 200: OkSchema, ...errors(403, 404) },
+      },
+    },
     async (req) => {
       requireAdmin(req);
       const s = await getSet(db, req.params.slug);

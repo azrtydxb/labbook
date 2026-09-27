@@ -6,17 +6,70 @@ import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
-import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
+import {
+  jsonSchemaTransform,
+  jsonSchemaTransformObject,
+  serializerCompiler,
+  validatorCompiler,
+} from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
 import { registerAuth } from './auth.js';
 import type { Config } from './config.js';
 import type { Database } from './db/index.js';
 import { HttpError } from './errors.js';
 import { authRoutes } from './routes/auth.js';
+import { baselineRoutes } from './routes/baselines.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { runRoutes } from './routes/runs.js';
 import { setRoutes } from './routes/sets.js';
 import { typeRoutes } from './routes/types.js';
+
+const binary = { type: 'string', format: 'binary' };
+const errorRef = { $ref: '#/components/schemas/Error' };
+/**
+ * Bodies the zod provider cannot describe: multipart and raw uploads (parsed outside
+ * the validator) and binary or CSV downloads (sent as-is, never serialized). These
+ * are spec-only JSON Schema; they do not validate anything at runtime.
+ */
+const DOC_ONLY: Record<string, Record<string, unknown>> = {
+  'POST /api/v1/runs/:id/attachments': {
+    body: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { ...binary, description: 'One or more file parts; any field name' } },
+    },
+  },
+  'PUT /api/v1/runs/:id/attachments/:filename': {
+    body: { ...binary, description: 'The file content; any Content-Type' },
+  },
+  'GET /api/v1/attachments/:id': {
+    produces: ['application/octet-stream', 'text/plain'],
+    response: {
+      200: { description: 'The file, with its stored Content-Type (text/plain with inline=1)', ...binary },
+      404: { description: 'Attachment not found', ...errorRef },
+    },
+  },
+  'GET /api/v1/export': {
+    response: {
+      200: {
+        description: 'CSV (format=csv) or JSON (format=json) download',
+        content: {
+          'text/csv': { schema: { type: 'string', description: 'One row per run' } },
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                exportedAt: { type: 'string', format: 'date-time' },
+                filter: { type: 'object', additionalProperties: true },
+                runs: { type: 'array', items: { $ref: '#/components/schemas/RunSummary' } },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
 
 export async function buildApp(
   db: Database,
@@ -48,7 +101,12 @@ export async function buildApp(
       },
       security: [{ bearer: [] }],
     },
-    transform: jsonSchemaTransform,
+    transform: (doc) => {
+      const out = jsonSchemaTransform(doc);
+      const extra = DOC_ONLY[`${doc.route.method} ${doc.url}`];
+      return extra ? { ...out, schema: { ...out.schema, ...extra } } : out;
+    },
+    transformObject: jsonSchemaTransformObject,
   });
   await app.register(swaggerUi, { routePrefix: '/api/docs' });
 
@@ -83,6 +141,7 @@ export async function buildApp(
 
   authRoutes(app, db, cfg);
   typeRoutes(app, db);
+  baselineRoutes(app, db);
   runRoutes(app, db, cfg);
   setRoutes(app, db);
   dashboardRoutes(app, db);

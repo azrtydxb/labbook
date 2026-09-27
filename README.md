@@ -12,16 +12,24 @@ Deployed at **https://labbook.kw.watteel.lab** (kw cluster, namespace `labbook`)
 - Stack: Node 22 + TypeScript, Fastify 5, zod 4, Kysely + Postgres (CNPG), React 19 + Vite +
   Tailwind 4 + Recharts, one container image.
 - API docs (OpenAPI, interactive): https://labbook.kw.watteel.lab/api/docs
-  (raw spec: `/api/docs/json`).
+  (raw spec: `/api/docs/json`). Every operation has an operationId and typed responses;
+  `test/openapi.test.ts` keeps it that way.
+- Agents: an MCP server generated from that spec ([mcp/](mcp/README.md)) and a skill
+  ([skills/labbook/SKILL.md](skills/labbook/SKILL.md)).
+
+Any kind of test fits — GPU serving benchmarks, `fio` IOPS, `iperf3` throughput, soak and
+correctness suites: a test type is only its parameters and data points.
 
 ## Concepts
 
-| Concept       | What it holds                                                                                                                                                                                                                                                                                                                              |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Test type** | Name, description, tags and a versioned schema: **parameters** (e.g. model, gpu, commit; _identity_ parameters decide which runs are comparable) and **data points** (key, label, unit, number/boolean/string, better = higher/lower/none, optional bounds `min`/`max`, `relMin`/`relMax` × baseline, or `expected` for booleans/strings). |
-| **Run**       | One submission: type + schema version, time, source, parameter values, data point values, status (pass/fail/error/info; computed from the bounds when omitted), markdown notes and conclusion with edit history, links (commit, branch, CI URL), attachments.                                                                              |
-| **Set**       | A named group of runs (a run can be in several) with a description and a conclusion, e.g. "Phase 4 KV tiers".                                                                                                                                                                                                                              |
-| **Baseline**  | For a run, the previous run of the same type with equal identity parameters. Relative bounds and deltas use it. In a set you can also pick a set baseline.                                                                                                                                                                                 |
+| Concept             | What it holds                                                                                                                                                                                                                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Test type**       | Name, description, tags and a versioned schema: **parameters** (e.g. model, gpu, commit; _identity_ parameters decide which runs are comparable) and **data points** (key, label, unit, number/boolean/string, better = higher/lower/none, optional bounds `min`/`max`, `relMin`/`relMax` × baseline, or `expected` for booleans/strings). |
+| **Run**             | One submission: type + schema version, time, source, parameter values, data point values, status (pass/fail/error/info; computed from the bounds when omitted), markdown notes and conclusion with edit history, links (commit, branch, CI URL), attachments.                                                                              |
+| **Set**             | A named group of runs (a run can be in several) with a description and a conclusion, e.g. "Phase 4 KV tiers".                                                                                                                                                                                                                              |
+| **Baseline**        | For a run, the previous run of the same type with equal identity parameters. Bounds (so pass/fail) and deltas use it. In a set you can also pick a set baseline.                                                                                                                                                                           |
+| **Pinned baseline** | A named reference per test type ("vLLM-ROCm 0.23.0", "release 1.4", "old controller") with one member run per combination of its match keys (e.g. one per model or per device). Every run is compared with its matching member. Shown on runs and charts; never changes pass/fail.                                                         |
+| **Target**          | A zone per data point that counts as good: absolute (`max 10`), a ratio of a pinned baseline (`≥ 0.75 × vLLM`) or of the best earlier comparable run (`≥ 0.97 × best`). Grades runs on/below target; never changes pass/fail.                                                                                                              |
 
 Schema changes create a new version; old runs keep theirs. A data point may be added, removed or
 relabelled, but it cannot change value type (use a new key).

@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, ExternalLink, Eye, GitBranch, GitCommit, Trash2, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { BaselineComparisons, RunBaselineMembership } from '../components/Baselines';
 import { BoundStrip } from '../components/BoundStrip';
+import { TargetResults } from '../components/Targets';
 import { MarkdownField } from '../components/Markdown';
 import {
   Button,
@@ -256,6 +258,10 @@ export function RunDetailPage() {
             </div>
           </Panel>
 
+          <TargetResults run={r} />
+
+          <BaselineComparisons run={r} />
+
           <Panel>
             <div className="space-y-6">
               <MarkdownField
@@ -456,6 +462,8 @@ export function RunDetailPage() {
             </form>
             <ErrorNote error={addToSet.error} />
           </Panel>
+
+          <RunBaselineMembership run={r} />
 
           <Panel
             title="Other changes"

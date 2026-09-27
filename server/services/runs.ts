@@ -3,10 +3,11 @@ import { sql, type SelectQueryBuilder } from 'kysely';
 import { z } from 'zod';
 import type { Database } from '../db/index.js';
 import type { Links } from '../db/schema.js';
-import { autoStatus, evaluateRun } from '../../shared/evaluate.js';
+import { autoStatus, evaluateRun, targetGrade } from '../../shared/evaluate.js';
 import { normalizeParams, SLUG_RE, validateValues } from '../../shared/definition.js';
 import type { RunStatus, Scalar, TypeDefinition } from '../../shared/types.js';
 import { badRequest, notFound } from '../errors.js';
+import { baselineMemberships, typeReferences } from './baselines.js';
 import { getDefinition } from './testTypes.js';
 
 const scalar = z.union([z.number(), z.boolean(), z.string(), z.null()]);
@@ -559,6 +560,10 @@ export async function listRuns(db: Database, f: RunFilter) {
           .execute(),
       ])
     : [[], []];
+  const memberships = await baselineMemberships(db, ids);
+  const refs = new Map<string, Awaited<ReturnType<typeof typeReferences>>>();
+  for (const typeId of new Set(rows.map((r) => r.type_id)))
+    refs.set(typeId, await typeReferences(db, typeId));
   return {
     total: Number(countRow?.n ?? 0),
     runs: rows.map((r) => ({
@@ -581,6 +586,8 @@ export async function listRuns(db: Database, f: RunFilter) {
       links: r.links,
       sets: sets.filter((s) => s.run_id === r.id).map((s) => ({ slug: s.slug, name: s.name })),
       attachmentCount: Number(atts.find((a) => a.run_id === r.id)?.n ?? 0),
+      baselineOf: memberships.get(r.id) ?? [],
+      target: targetGrade(refs.get(r.type_id)!.grade({ id: r.id, params: r.params, values: r.results })),
     })),
   };
 }
@@ -602,6 +609,7 @@ export async function getRunDetail(db: Database, id: string) {
     excludeId: id,
   });
   const evaluation = evaluateRun(def, run.values, baselineRow?.results ?? null);
+  const refs = await typeReferences(db, row.test_type_id);
   const [attachments, edits, type] = await Promise.all([
     db
       .selectFrom('attachments as a')
@@ -649,6 +657,8 @@ export async function getRunDetail(db: Database, id: string) {
           status: baselineRow.status,
         }
       : null,
+    baselines: refs.compare(run),
+    targets: refs.grade(run),
     attachments: attachments.map((a) => ({
       id: a.id,
       filename: a.filename,

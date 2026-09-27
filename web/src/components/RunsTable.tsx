@@ -2,6 +2,8 @@ import { Paperclip } from 'lucide-react';
 import { Link } from 'react-router';
 import { fmtDateTime, fmtValue, shortCommit } from '../lib/format';
 import type { Run, TypeDefinition } from '../lib/types';
+import { BaselineBadge } from './Baselines';
+import { TargetMark } from './Targets';
 import { StatusBadge, cx } from './ui';
 
 /** A compact, scannable run list. With `definition`, one column per data point. */
@@ -94,6 +96,8 @@ export function RunsTable({
                     <span className="line-clamp-1">{label}</span>
                   </Link>
                   <div className="flex items-center gap-2 text-xs text-ink-3">
+                    <TargetMark target={r.target} />
+                    <BaselineBadge baselines={r.baselineOf} />
                     {r.links.commit && <span className="font-mono">{shortCommit(r.links.commit)}</span>}
                     {r.attachmentCount > 0 && (
                       <span

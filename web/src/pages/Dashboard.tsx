@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import { Link } from 'react-router';
 import { RunsTable } from '../components/RunsTable';
+import { TargetMark } from '../components/Targets';
 import { Sparkline } from '../components/Sparkline';
 import { Empty, ErrorNote, PageHeader, Panel, Spinner, StatusBadge, Tag } from '../components/ui';
 import { api } from '../lib/api';
@@ -135,7 +136,12 @@ export function DashboardPage() {
                         </div>
                         <div className="truncate text-xs text-ink-3">
                           {r.type.name}
-                          {r.params.model ? ` · ${r.params.model}` : ''} · {relTime(r.runAt)}
+                          {Object.entries(r.params)
+                            .filter(([k]) => k !== 'label' && k !== 'commit')
+                            .slice(0, 3)
+                            .map(([, v]) => ` · ${v}`)
+                            .join('')}{' '}
+                          · {relTime(r.runAt)}
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
@@ -176,7 +182,10 @@ export function DashboardPage() {
                           {r.type.name} · {relTime(r.runAt)}
                         </div>
                       </div>
-                      <StatusBadge status={r.status} />
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <TargetMark target={r.target} />
+                        <StatusBadge status={r.status} />
+                      </span>
                     </Link>
                   </li>
                 ))}

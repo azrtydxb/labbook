@@ -71,7 +71,7 @@ function Tokens() {
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="turbine lab-bench on workstation"
+              placeholder="CI runner on build-01"
               required
             />
           </label>

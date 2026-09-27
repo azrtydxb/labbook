@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, GitCompareArrows, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { BaselineBadge } from '../components/Baselines';
 import { MarkdownField } from '../components/Markdown';
 import { MetricChart, type ChartSeries } from '../components/MetricChart';
 import {
@@ -196,6 +197,7 @@ function TypeSection({
                       <span className="ml-1 font-medium text-accent">set baseline</span>
                     )}
                   </div>
+                  <BaselineBadge baselines={r.baselineOf} className="mt-0.5" />
                   {r.conclusion && (
                     <div className="mt-0.5 line-clamp-2 text-xs text-ink-2">{r.conclusion}</div>
                   )}

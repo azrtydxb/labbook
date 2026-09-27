@@ -23,6 +23,25 @@ export const BoundsSchema = z
   })
   .strict();
 
+export const TargetSchema = z
+  .object({
+    ref: z
+      .enum(['absolute', 'baseline', 'best'])
+      .describe('absolute: min/max in the unit; baseline/best: min/max as ratios of the reference'),
+    baseline: z.string().regex(SLUG_RE).optional().describe('Baseline slug, for ref=baseline'),
+    min: z.number().optional(),
+    max: z.number().optional(),
+    label: z.string().max(100).optional(),
+  })
+  .strict()
+  .refine((t) => t.min !== undefined || t.max !== undefined, { message: 'a target needs min or max' })
+  .refine((t) => (t.ref === 'baseline') === (t.baseline !== undefined), {
+    message: "give 'baseline' exactly when ref is 'baseline'",
+  })
+  .refine((t) => t.ref === 'absolute' || ((t.min ?? 1) > 0 && (t.max ?? 1) > 0), {
+    message: 'relative targets are positive ratios, e.g. 0.75',
+  });
+
 export const DataPointDefSchema = z.object({
   key,
   label: z.string().max(100).default(''),
@@ -31,6 +50,11 @@ export const DataPointDefSchema = z.object({
   better: z.enum(['higher', 'lower', 'none']).default('none'),
   description: z.string().max(2000).default(''),
   bounds: BoundsSchema.optional(),
+  targets: z
+    .array(TargetSchema)
+    .max(10)
+    .optional()
+    .describe('Zones that count as good; they grade runs on/below target and never change pass/fail'),
 });
 
 export const TypeDefinitionSchema = z
@@ -58,6 +82,12 @@ export const TypeDefinitionSchema = z
       }
       if (b?.expected !== undefined && d.type !== typeof b.expected) {
         ctx.addIssue({ code: 'custom', message: `${d.key}: 'expected' must be a ${d.type}` });
+      }
+      if (d.targets?.length && d.type !== 'number') {
+        ctx.addIssue({ code: 'custom', message: `${d.key}: targets apply to number data points only` });
+      }
+      if (d.targets?.some((t) => t.ref === 'best') && d.better === 'none') {
+        ctx.addIssue({ code: 'custom', message: `${d.key}: a 'best' target needs better=higher or lower` });
       }
     }
     if (def.primary && !dps.has(def.primary)) {

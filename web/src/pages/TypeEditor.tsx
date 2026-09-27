@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
@@ -14,8 +14,34 @@ import {
   Textarea,
   cx,
 } from '../components/ui';
+import { useBaselines } from '../components/Baselines';
 import { api } from '../lib/api';
-import type { DataPointDef, ParameterDef, TypeDefinition, TypeDetail } from '../lib/types';
+import type { Baseline, DataPointDef, ParameterDef, Target, TypeDefinition, TypeDetail } from '../lib/types';
+import { targetLabel } from '../../../shared/evaluate';
+
+/** A target zone as edited: numbers stay strings until saved. */
+interface TargetRow {
+  ref: Target['ref'];
+  baseline: string;
+  min: string;
+  max: string;
+  label: string;
+}
+
+const emptyTarget = (): TargetRow => ({ ref: 'absolute', baseline: '', min: '', max: '', label: '' });
+
+function toTarget(t: TargetRow): Target {
+  const num = (s: string) => (s.trim() === '' ? undefined : Number(s));
+  const min = num(t.min);
+  const max = num(t.max);
+  return {
+    ref: t.ref,
+    ...(t.ref === 'baseline' ? { baseline: t.baseline } : {}),
+    ...(min !== undefined ? { min } : {}),
+    ...(max !== undefined ? { max } : {}),
+    ...(t.label.trim() ? { label: t.label.trim() } : {}),
+  };
+}
 
 interface DpRow {
   key: string;
@@ -29,6 +55,7 @@ interface DpRow {
   relMin: string;
   relMax: string;
   expected: string;
+  targets: TargetRow[];
 }
 
 const emptyDp = (): DpRow => ({
@@ -43,6 +70,7 @@ const emptyDp = (): DpRow => ({
   relMin: '',
   relMax: '',
   expected: '',
+  targets: [],
 });
 
 function toRows(def: TypeDefinition): { params: ParameterDef[]; dps: DpRow[] } {
@@ -60,6 +88,13 @@ function toRows(def: TypeDefinition): { params: ParameterDef[]; dps: DpRow[] } {
       relMin: d.bounds?.relMin?.toString() ?? '',
       relMax: d.bounds?.relMax?.toString() ?? '',
       expected: d.bounds?.expected === undefined ? '' : String(d.bounds.expected),
+      targets: (d.targets ?? []).map((t) => ({
+        ref: t.ref,
+        baseline: t.baseline ?? '',
+        min: t.min?.toString() ?? '',
+        max: t.max?.toString() ?? '',
+        label: t.label ?? '',
+      })),
     })),
   };
 }
@@ -90,10 +125,141 @@ function toDefinition(params: ParameterDef[], dps: DpRow[], primary: string): Ty
           better: d.better,
           description: d.description,
           ...(Object.keys(bounds).length ? { bounds } : {}),
+          ...(d.type === 'number' && d.targets.length ? { targets: d.targets.map(toTarget) } : {}),
         } as DataPointDef;
       }),
     ...(primary ? { primary } : {}),
   };
+}
+
+/** Target zones of one numeric data point. */
+function TargetsEditor({
+  dp,
+  baselines,
+  onChange,
+}: {
+  dp: DpRow;
+  baselines: Baseline[];
+  onChange: (targets: TargetRow[]) => void;
+}) {
+  const set = (i: number, patch: Partial<TargetRow>) =>
+    onChange(dp.targets.map((t, j) => (j === i ? { ...t, ...patch } : t)));
+  const name = dp.key || 'this data point';
+  return (
+    <div className="mt-3 border-t border-rule pt-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-medium text-ink-2">
+          Target zones
+          <span className="ml-1 font-normal text-ink-3">
+            informational: runs are graded on or off target, never failed
+          </span>
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => onChange([...dp.targets, emptyTarget()])}
+        >
+          <Plus className="size-3.5" aria-hidden /> Target
+        </Button>
+      </div>
+      <div className="space-y-2">
+        {dp.targets.map((t, i) => {
+          const ratio = t.ref !== 'absolute';
+          const known = baselines.some((b) => b.slug === t.baseline);
+          const preview = targetLabel(toTarget(t), baselines.find((b) => b.slug === t.baseline)?.name);
+          return (
+            <div
+              key={i}
+              role="group"
+              aria-label={`Target ${i + 1} of ${name}`}
+              className="grid items-end gap-2 sm:grid-cols-2 lg:grid-cols-[170px_minmax(0,1.3fr)_88px_88px_minmax(0,1fr)_auto]"
+            >
+              <label>
+                <Label>Relative to</Label>
+                <Select value={t.ref} onChange={(e) => set(i, { ref: e.target.value as Target['ref'] })}>
+                  <option value="absolute">Fixed values</option>
+                  <option value="baseline">Pinned baseline</option>
+                  <option value="best">Best earlier run</option>
+                </Select>
+              </label>
+              {t.ref === 'baseline' ? (
+                <label>
+                  <Label>Baseline</Label>
+                  <Select value={t.baseline} onChange={(e) => set(i, { baseline: e.target.value })}>
+                    <option value="">Choose a baseline…</option>
+                    {baselines.map((b) => (
+                      <option key={b.slug} value={b.slug}>
+                        {b.name}
+                      </option>
+                    ))}
+                    {t.baseline && !known && <option value={t.baseline}>{t.baseline} (not found)</option>}
+                  </Select>
+                  {baselines.length === 0 && (
+                    <span className="mt-1 block text-xs text-ink-3">
+                      No baselines yet; pin them on the test type’s page.
+                    </span>
+                  )}
+                </label>
+              ) : (
+                <p
+                  className={cx(
+                    'self-center text-xs',
+                    t.ref === 'best' && dp.better === 'none' ? 'text-fail' : 'text-ink-3',
+                  )}
+                >
+                  {t.ref === 'absolute'
+                    ? `min and max in ${dp.unit || 'the data point’s unit'}`
+                    : dp.better === 'none'
+                      ? 'Needs “Better” set to higher or lower.'
+                      : 'Best of the earlier runs with the same identity parameters.'}
+                </p>
+              )}
+              <label>
+                <Label hint={ratio ? '× ref' : dp.unit || undefined}>min</Label>
+                <Input
+                  inputMode="decimal"
+                  value={t.min}
+                  onChange={(e) => set(i, { min: e.target.value })}
+                  placeholder={ratio ? '0.75' : ''}
+                />
+              </label>
+              <label>
+                <Label hint={ratio ? '× ref' : dp.unit || undefined}>max</Label>
+                <Input
+                  inputMode="decimal"
+                  value={t.max}
+                  onChange={(e) => set(i, { max: e.target.value })}
+                  placeholder={ratio ? '1.1' : ''}
+                />
+              </label>
+              <label>
+                <Label hint="optional">Label</Label>
+                <Input
+                  value={t.label}
+                  onChange={(e) => set(i, { label: e.target.value })}
+                  placeholder={preview || 'shown on charts and runs'}
+                />
+              </label>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label={`Remove target ${i + 1} of ${name}`}
+                onClick={() => onChange(dp.targets.filter((_, j) => j !== i))}
+              >
+                <X className="size-4" aria-hidden />
+              </Button>
+            </div>
+          );
+        })}
+        {dp.targets.length > 0 && (
+          <p className="text-xs text-ink-3">
+            Relative targets take ratios: min 0.75 means at least 75% of the reference, max 1.1 at most 110%.
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function TypeEditorPage() {
@@ -116,6 +282,7 @@ export function TypeEditorPage() {
     { key: '', label: '', description: '', identity: true },
   ]);
   const [dps, setDps] = useState<DpRow[]>([emptyDp()]);
+  const baselines = useBaselines(editSlug ?? '');
   const [jsonMode, setJsonMode] = useState(false);
   const [json, setJson] = useState('');
 
@@ -202,7 +369,7 @@ export function TypeEditorPage() {
                 disabled={!isNew}
                 required
                 pattern="[a-z0-9][a-z0-9._\-]*"
-                placeholder="turbine-lab-bench"
+                placeholder="fio-randread"
               />
             </label>
             <label>
@@ -211,7 +378,7 @@ export function TypeEditorPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                placeholder="Turbine lab bench"
+                placeholder="fio random read"
               />
             </label>
             <label className="md:col-span-2">
@@ -220,7 +387,7 @@ export function TypeEditorPage() {
             </label>
             <label>
               <Label hint="comma separated">Tags</Label>
-              <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="perf, gpu" />
+              <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="storage, perf" />
             </label>
             {!isNew && (
               <label>
@@ -228,7 +395,7 @@ export function TypeEditorPage() {
                 <Input
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="added decode_fwd_ms"
+                  placeholder="added p99_latency_ms"
                 />
               </label>
             )}
@@ -276,7 +443,7 @@ export function TypeEditorPage() {
           <>
             <Panel
               title="Parameters"
-              subtitle="Identity parameters decide which runs are comparable (e.g. model, gpu); the others (commit, label) may differ between comparable runs."
+              subtitle="Identity parameters decide which runs are comparable (e.g. device, block size); the others (commit, label) may differ between comparable runs."
               actions={
                 <Button
                   type="button"
@@ -297,7 +464,7 @@ export function TypeEditorPage() {
                       <Input
                         value={p.key}
                         onChange={(e) => setParam(i, { key: e.target.value })}
-                        placeholder="model"
+                        placeholder="device"
                       />
                     </label>
                     <label>
@@ -305,7 +472,7 @@ export function TypeEditorPage() {
                       <Input
                         value={p.label}
                         onChange={(e) => setParam(i, { label: e.target.value })}
-                        placeholder="Model"
+                        placeholder="Device"
                       />
                     </label>
                     <label>
@@ -369,7 +536,7 @@ export function TypeEditorPage() {
                         <Input
                           value={d.key}
                           onChange={(e) => setDp(i, { key: e.target.value })}
-                          placeholder="tok_s"
+                          placeholder="iops"
                         />
                       </label>
                       <label>
@@ -377,7 +544,7 @@ export function TypeEditorPage() {
                         <Input
                           value={d.label}
                           onChange={(e) => setDp(i, { label: e.target.value })}
-                          placeholder="Throughput"
+                          placeholder="Random read"
                         />
                       </label>
                       <label>
@@ -385,7 +552,7 @@ export function TypeEditorPage() {
                         <Input
                           value={d.unit}
                           onChange={(e) => setDp(i, { unit: e.target.value })}
-                          placeholder="tok/s"
+                          placeholder="IOPS"
                         />
                       </label>
                       <label>
@@ -452,6 +619,13 @@ export function TypeEditorPage() {
                         </label>
                       )}
                     </div>
+                    {d.type === 'number' && (
+                      <TargetsEditor
+                        dp={d}
+                        baselines={baselines.data ?? []}
+                        onChange={(targets) => setDp(i, { targets })}
+                      />
+                    )}
                   </fieldset>
                 ))}
               </div>

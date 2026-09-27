@@ -2,10 +2,10 @@
 
 <!-- procoder:facts -->
 
-generated: 2026-09-27T06:53:17Z
+generated: 2026-09-27T07:42:18Z
 branch: main — this is the default branch
-head: 54f1e95
-dirty files: none (clean tree)
+head: 0ca0afd
+dirty files: 35
 sprint: none — no backlog yet (`procoder backlog` starts one)
 open tasks: none
 unlearned lessons: none — no ledger at .procoder/github/LESSONS.md

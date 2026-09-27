@@ -14,6 +14,14 @@ import {
   typeDto,
   upsertType,
 } from '../services/testTypes.js';
+import {
+  errors,
+  OkSchema,
+  TestTypeDetailSchema,
+  TestTypeSummarySchema,
+  TypeDefinitionOut,
+  TypeUpsertResultSchema,
+} from '../schemas.js';
 
 const SlugParams = z.object({ slug: z.string().max(100) });
 
@@ -24,9 +32,19 @@ export function typeRoutes(app: FastifyInstance, db: Database): void {
     '/api/v1/test-types',
     {
       schema: {
+        operationId: 'listTestTypes',
         tags: ['test types'],
         summary: 'List test types with run counts and the recent trend of the primary data point',
-        querystring: z.object({ trend: z.coerce.number().int().min(0).max(200).default(30) }),
+        querystring: z.object({
+          trend: z.coerce
+            .number()
+            .int()
+            .min(0)
+            .max(200)
+            .default(30)
+            .describe('How many recent primary values to include per type (0: none)'),
+        }),
+        response: { 200: z.object({ types: z.array(TestTypeSummarySchema) }), ...errors() },
       },
     },
     async (req) => {
@@ -89,9 +107,11 @@ export function typeRoutes(app: FastifyInstance, db: Database): void {
     '/api/v1/test-types/:slug',
     {
       schema: {
+        operationId: 'getTestType',
         tags: ['test types'],
         summary: 'A test type: current definition, all versions, and the merged definition',
         params: SlugParams,
+        response: { 200: TestTypeDetailSchema, ...errors(404) },
       },
     },
     async (req) => {
@@ -121,8 +141,13 @@ export function typeRoutes(app: FastifyInstance, db: Database): void {
     '/api/v1/test-types/:slug/versions/:version',
     {
       schema: {
+        operationId: 'getTestTypeVersion',
         tags: ['test types'],
-        summary: 'One schema version',
+        summary: 'One schema version of a test type',
+        response: {
+          200: z.object({ version: z.number().int(), definition: TypeDefinitionOut }),
+          ...errors(404),
+        },
         params: SlugParams.extend({ version: z.coerce.number().int().positive() }),
       },
     },
@@ -135,7 +160,15 @@ export function typeRoutes(app: FastifyInstance, db: Database): void {
 
   r.post(
     '/api/v1/test-types',
-    { schema: { tags: ['test types'], summary: 'Define a new test type', body: TypeCreateSchema } },
+    {
+      schema: {
+        operationId: 'createTestType',
+        tags: ['test types'],
+        summary: 'Define a new test type (fails if the slug exists; prefer upsertTestType)',
+        body: TypeCreateSchema,
+        response: { 201: TypeUpsertResultSchema, ...errors(409) },
+      },
+    },
     async (req, reply) => {
       const me = requireUser(req);
       const res = await upsertType(db, req.body.slug, req.body, me.id, 'create');
@@ -148,10 +181,15 @@ export function typeRoutes(app: FastifyInstance, db: Database): void {
     '/api/v1/test-types/:slug',
     {
       schema: {
+        operationId: 'upsertTestType',
         tags: ['test types'],
         summary: 'Create or update a test type (idempotent). A changed definition becomes a new version.',
+        description:
+          'Runs keep the version they were recorded under. Data points may be added, removed or ' +
+          'relabelled, but an existing key cannot change its value type (400 incompatible schema change).',
         params: SlugParams,
         body: TypeInputSchema,
+        response: { 200: TypeUpsertResultSchema, 201: TypeUpsertResultSchema, ...errors() },
       },
     },
     async (req, reply) => {
@@ -166,9 +204,11 @@ export function typeRoutes(app: FastifyInstance, db: Database): void {
     '/api/v1/test-types/:slug',
     {
       schema: {
+        operationId: 'deleteTestType',
         tags: ['test types'],
         summary: 'Delete a test type without runs (admin)',
         params: SlugParams,
+        response: { 200: OkSchema, ...errors(403, 404, 409) },
       },
     },
     async (req) => {

@@ -16,6 +16,7 @@ import {
 import type { Config } from '../config.js';
 import type { Database } from '../db/index.js';
 import { badRequest, conflict, forbidden, HttpError, notFound, unauthorized } from '../errors.js';
+import { ApiTokenSchema, errors, OkSchema, UserListItemSchema, UserSchema } from '../schemas.js';
 
 const failures = new Map<string, { n: number; until: number }>();
 const WINDOW_MS = 15 * 60 * 1000;
@@ -31,15 +32,31 @@ const Username = z
 export function authRoutes(app: FastifyInstance, db: Database, cfg: Config): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
-  r.get('/api/v1/health', { schema: { tags: ['meta'], summary: 'Liveness' } }, async () => ({ ok: true }));
+  r.get(
+    '/api/v1/health',
+    {
+      schema: {
+        operationId: 'health',
+        tags: ['meta'],
+        summary: 'Liveness (no authentication)',
+        security: [],
+        response: { 200: OkSchema },
+      },
+    },
+    async () => ({ ok: true }),
+  );
 
   r.post(
     '/api/v1/auth/login',
     {
       schema: {
+        operationId: 'login',
         tags: ['auth'],
         summary: 'Log in (web GUI); sets the httpOnly session cookie',
+        description: 'Scripts and agents use a bearer API token instead.',
+        security: [],
         body: z.object({ username: z.string().max(64), password: z.string().max(200) }),
+        response: { 200: z.object({ user: UserSchema }), ...errors(429) },
       },
     },
     async (req, reply) => {
@@ -76,24 +93,41 @@ export function authRoutes(app: FastifyInstance, db: Database, cfg: Config): voi
     },
   );
 
-  r.post('/api/v1/auth/logout', { schema: { tags: ['auth'], summary: 'Log out' } }, async (req, reply) => {
-    const c = req.cookies[SESSION_COOKIE];
-    if (c) await db.deleteFrom('sessions').where('id', '=', sha256(c)).execute();
-    reply.clearCookie(SESSION_COOKIE, { path: '/' });
-    return { ok: true };
-  });
+  r.post(
+    '/api/v1/auth/logout',
+    { schema: { operationId: 'logout', tags: ['auth'], summary: 'Log out', response: { 200: OkSchema } } },
+    async (req, reply) => {
+      const c = req.cookies[SESSION_COOKIE];
+      if (c) await db.deleteFrom('sessions').where('id', '=', sha256(c)).execute();
+      reply.clearCookie(SESSION_COOKIE, { path: '/' });
+      return { ok: true };
+    },
+  );
 
-  r.get('/api/v1/auth/me', { schema: { tags: ['auth'], summary: 'The current user' } }, async (req) => ({
-    user: requireUser(req),
-    authMethod: req.authMethod,
-  }));
+  r.get(
+    '/api/v1/auth/me',
+    {
+      schema: {
+        operationId: 'whoami',
+        tags: ['auth'],
+        summary: 'The current user and how they authenticated',
+        response: {
+          200: z.object({ user: UserSchema, authMethod: z.enum(['session', 'token']).nullable() }),
+          ...errors(),
+        },
+      },
+    },
+    async (req) => ({ user: requireUser(req), authMethod: req.authMethod }),
+  );
 
   r.post(
     '/api/v1/auth/password',
     {
       schema: {
+        operationId: 'changePassword',
         tags: ['auth'],
         summary: 'Change your own password',
+        response: { 200: OkSchema, ...errors() },
         body: z.object({ currentPassword: z.string().max(200), newPassword: Password }),
       },
     },
@@ -114,31 +148,44 @@ export function authRoutes(app: FastifyInstance, db: Database, cfg: Config): voi
 
   // ---- users (admin) -------------------------------------------------------
 
-  r.get('/api/v1/users', { schema: { tags: ['users'], summary: 'List users (admin)' } }, async (req) => {
-    requireAdmin(req);
-    const rows = await db
-      .selectFrom('users')
-      .select(['id', 'username', 'display_name', 'role', 'disabled', 'created_at'])
-      .orderBy('username')
-      .execute();
-    return {
-      users: rows.map((u) => ({
-        id: u.id,
-        username: u.username,
-        displayName: u.display_name,
-        role: u.role,
-        disabled: u.disabled,
-        createdAt: u.created_at,
-      })),
-    };
-  });
+  r.get(
+    '/api/v1/users',
+    {
+      schema: {
+        operationId: 'listUsers',
+        tags: ['users'],
+        summary: 'List users (admin)',
+        response: { 200: z.object({ users: z.array(UserListItemSchema) }), ...errors(403) },
+      },
+    },
+    async (req) => {
+      requireAdmin(req);
+      const rows = await db
+        .selectFrom('users')
+        .select(['id', 'username', 'display_name', 'role', 'disabled', 'created_at'])
+        .orderBy('username')
+        .execute();
+      return {
+        users: rows.map((u) => ({
+          id: u.id,
+          username: u.username,
+          displayName: u.display_name,
+          role: u.role,
+          disabled: u.disabled,
+          createdAt: u.created_at,
+        })),
+      };
+    },
+  );
 
   r.post(
     '/api/v1/users',
     {
       schema: {
+        operationId: 'createUser',
         tags: ['users'],
         summary: 'Create a user (admin)',
+        response: { 201: z.object({ id: z.uuid() }), ...errors(403, 409) },
         body: z.object({
           username: Username,
           displayName: z.string().max(200).default(''),
@@ -174,8 +221,10 @@ export function authRoutes(app: FastifyInstance, db: Database, cfg: Config): voi
     '/api/v1/users/:id',
     {
       schema: {
+        operationId: 'updateUser',
         tags: ['users'],
         summary: 'Update a user: role, disabled, display name, password reset (admin)',
+        response: { 200: OkSchema, ...errors(403, 404) },
         params: z.object({ id: z.uuid() }),
         body: z.object({
           displayName: z.string().max(200).optional(),
@@ -217,8 +266,10 @@ export function authRoutes(app: FastifyInstance, db: Database, cfg: Config): voi
     '/api/v1/tokens',
     {
       schema: {
+        operationId: 'listTokens',
         tags: ['tokens'],
         summary: 'List API tokens (yours; admins may pass all=true)',
+        response: { 200: z.object({ tokens: z.array(ApiTokenSchema) }), ...errors() },
         querystring: z.object({ all: z.enum(['true', 'false']).optional() }),
       },
     },
@@ -259,8 +310,14 @@ export function authRoutes(app: FastifyInstance, db: Database, cfg: Config): voi
     '/api/v1/tokens',
     {
       schema: {
+        operationId: 'createToken',
         tags: ['tokens'],
         summary: 'Create an API token; the secret is returned once',
+        description: 'Only from a web GUI session: a token cannot mint further tokens.',
+        response: {
+          201: z.object({ id: z.uuid(), name: z.string(), prefix: z.string(), token: z.string() }),
+          ...errors(403),
+        },
         body: z.object({ name: z.string().min(1).max(100) }),
       },
     },
@@ -280,7 +337,15 @@ export function authRoutes(app: FastifyInstance, db: Database, cfg: Config): voi
 
   r.delete(
     '/api/v1/tokens/:id',
-    { schema: { tags: ['tokens'], summary: 'Revoke an API token', params: z.object({ id: z.uuid() }) } },
+    {
+      schema: {
+        operationId: 'revokeToken',
+        tags: ['tokens'],
+        summary: 'Revoke an API token',
+        params: z.object({ id: z.uuid() }),
+        response: { 200: OkSchema, ...errors(404) },
+      },
+    },
     async (req) => {
       const me = requireUser(req);
       const t = await db
