@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: labbook
+  labels:
+    app.kubernetes.io/name: labbook
+    app.kubernetes.io/part-of: labbook
+spec:
+  # Sessions and all state live in Postgres; migrations take Kysely's lock, so two
+  # replicas can start together.
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: labbook
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: labbook
+        app.kubernetes.io/part-of: labbook
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: { app.kubernetes.io/name: labbook }
+      containers:
+        - name: labbook
+          image: labbook
+          ports:
+            - { name: http, containerPort: 8080 }
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: labbook-db-app, key: uri } }
+            # Seeds the first admin when the users table is empty; ignored afterwards.
+            - name: ADMIN_USERNAME
+              valueFrom: { secretKeyRef: { name: labbook-admin, key: username, optional: true } }
+            - name: ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: labbook-admin, key: password, optional: true } }
+            - { name: MAX_ATTACHMENT_BYTES, value: '26214400' }
+            - { name: MAX_BODY_BYTES, value: '67108864' }
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { memory: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: labbook
+  labels:
+    app.kubernetes.io/name: labbook
+    app.kubernetes.io/part-of: labbook
+spec:
+  selector:
+    app.kubernetes.io/name: labbook
+  ports:
+    - { name: http, port: 80, targetPort: http }

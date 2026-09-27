@@ -1,0 +1,125 @@
+# Test on the kw arm64 runners, then build and push the arm64 image to Nexus.
+# Adapted from internal-lab/templates/workflows/{node,container-image}.yml; read
+# internal-lab/AGENTS.md before changing runner labels, registries or the CA step.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NPM_PROXY: https://192.168.10.131:8443/repository/npmjs/
+
+jobs:
+  test:
+    runs-on: arc-azrtydxb
+    timeout-minutes: 30
+    # The runner image has no node; the Dockerfile uses the same base image.
+    container:
+      image: node:22-bookworm-slim
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:ci@postgres:5432/postgres
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # The job container does not inherit the runner's cluster CA.
+      - name: Trust the cluster CA
+        run: |
+          apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
+          curl -sk -o /tmp/cluster-ca.crt \
+            https://192.168.10.131:8443/repository/public/cluster-ca.crt
+          echo "NODE_EXTRA_CA_CERTS=/tmp/cluster-ca.crt" >> "$GITHUB_ENV"
+
+      - name: Point npm at the local proxy
+        run: |
+          npm config set registry "$NPM_PROXY"
+          npm config set cafile /tmp/cluster-ca.crt
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  image:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: arc-azrtydxb-publish
+    timeout-minutes: 60
+    env:
+      PUSH_REGISTRY: 192.168.10.131:5000
+      IMAGE: 192.168.10.131:5000/azrtydxb/labbook
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Compute tags
+        id: meta
+        run: |
+          {
+            echo "tags<<EOF"
+            echo "${IMAGE}:sha-${GITHUB_SHA::7}"
+            [ "${GITHUB_REF}" = "refs/heads/main" ] && echo "${IMAGE}:main"
+            [ "${GITHUB_REF_TYPE}" = "tag" ] && echo "${IMAGE}:${GITHUB_REF_NAME#v}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up buildx
+        run: |
+          cat > /tmp/buildkitd.toml <<'EOF'
+          [registry."192.168.10.131"]
+            insecure = true
+          [registry."192.168.10.131:5000"]
+            insecure = true
+          [registry."docker.io"]
+            mirrors = ["192.168.10.131"]
+          [registry."gcr.io"]
+            mirrors = ["192.168.10.131"]
+          EOF
+          docker buildx create --name builder --driver docker-container \
+            --platform linux/arm64 --buildkitd-config /tmp/buildkitd.toml --use
+          docker buildx inspect --bootstrap
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.PUSH_REGISTRY }}
+          username: ${{ secrets.NEXUS_USER }}
+          password: ${{ secrets.NEXUS_PASSWORD }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          builder: builder
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            NPM_REGISTRY=${{ env.NPM_PROXY }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}-buildcache:arm64
+          cache-to: type=registry,ref=${{ env.IMAGE }}-buildcache:arm64,mode=max,image-manifest=true,ignore-error=true
+          provenance: false
+          sbom: false
+
+      - name: Digest
+        run: |
+          echo "pushed ${IMAGE}@${{ steps.build.outputs.digest }}"
+          echo "deploy: 192.168.10.131/azrtydxb/labbook@${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"

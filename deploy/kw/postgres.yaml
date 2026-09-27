@@ -1,0 +1,45 @@
+# Postgres for labbook: two CNPG instances on different nodes, one Longhorn replica each
+# (CNPG already replicates; a 3-replica Longhorn volume under each would make six copies).
+#
+# Backups, two independent layers (see also backup.yaml):
+#  - the PVCs join Longhorn's existing `critical` recurring-job group (backup-daily, 03:00,
+#    7 kept) whose target is the NAS (nfs://192.168.10.253:/mnt/Pool0/Backup/longhorn-kw);
+#  - a logical pg_dump every 6 hours onto a separate NFS volume, 30 days kept.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: labbook-db
+  labels:
+    app.kubernetes.io/name: labbook-db
+    app.kubernetes.io/part-of: labbook
+spec:
+  instances: 2
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.6
+  primaryUpdateStrategy: unsupervised
+  inheritedMetadata:
+    labels:
+      # Longhorn syncs recurring-job labels from the PVC to its volume.
+      recurring-job.longhorn.io/source: enabled
+      recurring-job-group.longhorn.io/critical: enabled
+  storage:
+    size: 10Gi
+    storageClass: longhorn-single
+    resizeInUseVolumes: true
+  bootstrap:
+    initdb:
+      database: labbook
+      owner: labbook
+      encoding: UTF8
+      localeCType: C
+      localeCollate: C
+  postgresql:
+    parameters:
+      max_connections: '100'
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  affinity:
+    podAntiAffinityType: required

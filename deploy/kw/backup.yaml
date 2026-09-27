@@ -1,0 +1,88 @@
+# Logical backups: pg_dump -Fc every 6 hours onto an NFS volume on the NAS, 30 days kept.
+# Restore:  pg_restore --clean --if-exists -d labbook <file>  (see README.md "Backups").
+# After the first run binds the volume, set its PV to Retain so deleting the namespace
+# cannot delete the dumps:
+#   kubectl --context kw patch pv "$(kubectl --context kw -n labbook get pvc labbook-dumps \
+#     -o jsonpath='{.spec.volumeName}')" -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: labbook-dumps
+  labels:
+    app.kubernetes.io/name: labbook-dumps
+    app.kubernetes.io/part-of: labbook
+spec:
+  storageClassName: truenas-nfs
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: labbook-pg-dump
+  labels:
+    app.kubernetes.io/name: labbook-pg-dump
+    app.kubernetes.io/part-of: labbook
+spec:
+  schedule: '17 */6 * * *'
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: labbook-pg-dump
+        spec:
+          restartPolicy: OnFailure
+          initContainers:
+            # NFS ignores fsGroup; hand the directory to the postgres user once.
+            - name: own-dumps
+              image: ghcr.io/cloudnative-pg/postgresql:17.6
+              command: ['sh', '-c', 'chown 26:26 /dumps && chmod 750 /dumps']
+              securityContext:
+                runAsUser: 0
+                runAsNonRoot: false
+                capabilities: { drop: [ALL], add: [CHOWN, FOWNER] }
+              volumeMounts:
+                - { name: dumps, mountPath: /dumps }
+          containers:
+            - name: pg-dump
+              image: ghcr.io/cloudnative-pg/postgresql:17.6
+              env:
+                - { name: PGHOST, value: labbook-db-rw }
+                - name: PGUSER
+                  valueFrom: { secretKeyRef: { name: labbook-db-app, key: username } }
+                - name: PGPASSWORD
+                  valueFrom: { secretKeyRef: { name: labbook-db-app, key: password } }
+                - name: PGDATABASE
+                  valueFrom: { secretKeyRef: { name: labbook-db-app, key: dbname } }
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  f="/dumps/labbook-$(date -u +%Y%m%dT%H%M%SZ).dump"
+                  pg_dump -Fc -f "$f.partial"
+                  mv "$f.partial" "$f"
+                  find /dumps -name 'labbook-*.dump' -mtime +30 -delete
+                  echo "wrote $f ($(du -h "$f" | cut -f1)); $(ls /dumps | wc -l) dumps kept"
+              securityContext:
+                runAsUser: 26
+                runAsNonRoot: true
+                allowPrivilegeEscalation: false
+                capabilities: { drop: [ALL] }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { memory: 512Mi }
+              volumeMounts:
+                - { name: dumps, mountPath: /dumps }
+          volumes:
+            - name: dumps
+              persistentVolumeClaim:
+                claimName: labbook-dumps

@@ -1,0 +1,16 @@
+# labbook on kw:  kubectl --context kw apply -k deploy/kw
+# The admin Secret is not in the repo; README.md "Deploy" creates it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: labbook
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - backup.yaml
+  - app.yaml
+  - ingress.yaml
+images:
+  # Pinned by digest; update from the CI run's summary (never a moving tag).
+  - name: labbook
+    newName: 192.168.10.131/azrtydxb/labbook
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

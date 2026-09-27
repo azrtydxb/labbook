@@ -1,0 +1,42 @@
+# labbook.kw.watteel.lab: the *.kw.watteel.lab wildcard already resolves to the
+# ingress-nginx LoadBalancer (192.168.10.120); the certificate comes from cert-manager's
+# cluster-ca ClusterIssuer, like the other kw apps.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: labbook-tls
+spec:
+  secretName: labbook-tls
+  dnsNames: [labbook.kw.watteel.lab]
+  issuerRef:
+    kind: ClusterIssuer
+    name: cluster-ca
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: labbook
+  labels:
+    app.kubernetes.io/name: labbook
+    app.kubernetes.io/part-of: labbook
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    # Batches with inline attachments; attachments themselves are capped at 25 MiB.
+    nginx.ingress.kubernetes.io/proxy-body-size: 64m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '300'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '300'
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [labbook.kw.watteel.lab]
+      secretName: labbook-tls
+  rules:
+    - host: labbook.kw.watteel.lab
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: labbook
+                port: { name: http }
