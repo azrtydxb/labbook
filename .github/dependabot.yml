@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: "/"
+    directory: '/'
     schedule:
       interval: weekly
       day: monday
@@ -10,7 +10,7 @@ updates:
       github_actions-minor-patch:
         update-types: [minor, patch]
   - package-ecosystem: docker
-    directory: "/"
+    directory: '/'
     schedule:
       interval: weekly
       day: monday
@@ -19,7 +19,7 @@ updates:
       docker-minor-patch:
         update-types: [minor, patch]
   - package-ecosystem: helm
-    directory: "/deploy/helm/labbook"
+    directory: '/deploy/helm/labbook'
     schedule:
       interval: weekly
       day: monday
@@ -29,8 +29,8 @@ updates:
         update-types: [minor, patch]
   - package-ecosystem: npm
     directories:
-      - "/"
-      - "/mcp"
+      - '/'
+      - '/mcp'
     schedule:
       interval: weekly
       day: monday
