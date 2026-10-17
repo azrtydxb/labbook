@@ -37,7 +37,7 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:ci@postgres:5432/postgres
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The job container does not inherit the runner's cluster CA.
       - name: Trust the cluster CA
@@ -71,7 +71,7 @@ jobs:
       PUSH_REGISTRY: 192.168.10.131:5000
       IMAGE: 192.168.10.131:5000/azrtydxb/labbook
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Compute tags
         id: meta
