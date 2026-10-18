@@ -33,7 +33,7 @@ jobs:
       image: node:22-bookworm-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: azrtydxb/ant-setup-action@a0009593481e175e73d029e92a167609da1b386c # v1
+      - uses: azrtydxb/ant-setup-action@00d5db396182b24877189b3aa9bb0231877ef299 # v1
 
       - run: npm ci --no-audit --no-fund
       - run: npm run format:check
@@ -64,7 +64,7 @@ jobs:
       DATABASE_URL: postgres://postgres:ci@postgres:5432/postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: azrtydxb/ant-setup-action@a0009593481e175e73d029e92a167609da1b386c # v1
+      - uses: azrtydxb/ant-setup-action@00d5db396182b24877189b3aa9bb0231877ef299 # v1
 
       - run: npm ci --no-audit --no-fund
       - run: npm run test:integration
@@ -83,7 +83,7 @@ jobs:
       IMAGE: 192.168.10.131:5000/azrtydxb/labbook
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: azrtydxb/ant-setup-action@a0009593481e175e73d029e92a167609da1b386c # v1
+      - uses: azrtydxb/ant-setup-action@00d5db396182b24877189b3aa9bb0231877ef299 # v1
 
       - name: Compute tags
         id: meta
