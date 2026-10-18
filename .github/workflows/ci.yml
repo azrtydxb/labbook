@@ -12,7 +12,7 @@ on:
   # Integration tier: the Postgres-backed suite, nightly. Pull requests run the
   # hermetic unit suite only (see the `test` job).
   schedule:
-    - cron: "17 2 * * *"
+    - cron: '17 2 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
