@@ -3,7 +3,7 @@
 #
 # NPM_REGISTRY points npm at the Nexus proxy in CI. BuildKit does not carry the cluster CA,
 # hence strict-ssl off for that registry only (docs/nexus-endpoints.md in internal-lab).
-ARG NODE_IMAGE=node:22-bookworm-slim
+ARG NODE_IMAGE=node:26-bookworm-slim
 
 FROM ${NODE_IMAGE} AS deps
 WORKDIR /app

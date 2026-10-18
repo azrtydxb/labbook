@@ -13,6 +13,10 @@ replicas: 2
 admin:
   secretName: labbook-admin
 
+database:
+  # Consolidated on the shared-pg cluster; the URI Secret is applied out of band.
+  secretName: labbook-db-shared
+
 ingress:
   enabled: true
   className: nginx
@@ -26,6 +30,8 @@ ingress:
       issuerName: cluster-ca
 
 postgresql:
+  # Consolidated on the shared-pg cluster (internal-lab/kubernetes/shared-pg).
+  enabled: false
   # Two instances on different nodes, one Longhorn replica each (CNPG already replicates).
   instances: 2
   inheritedMetadata:
