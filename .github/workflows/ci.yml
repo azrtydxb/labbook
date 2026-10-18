@@ -1,4 +1,5 @@
-# Test on the kw arm64 runners, then build and push the arm64 image to Nexus.
+# Test on the arm64 ARC runners (npm through Kuvryn Ant via azrtydxb/ant-setup-action),
+# then build and push the arm64 image to Nexus.
 # Adapted from internal-lab/templates/workflows/{node,container-image}.yml; read
 # internal-lab/AGENTS.md before changing runner labels, registries or the CA step.
 name: CI
@@ -18,8 +19,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-env:
-  NPM_PROXY: https://192.168.10.131:8443/repository/npmjs/
+permissions: write-all
 
 jobs:
   # Unit tier (required check `test`): format, lint, typecheck, the hermetic
@@ -33,19 +33,7 @@ jobs:
       image: node:22-bookworm-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # The job container does not inherit the runner's cluster CA.
-      - name: Trust the cluster CA
-        run: |
-          apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
-          curl -sk -o /tmp/cluster-ca.crt \
-            https://192.168.10.131:8443/repository/public/cluster-ca.crt
-          echo "NODE_EXTRA_CA_CERTS=/tmp/cluster-ca.crt" >> "$GITHUB_ENV"
-
-      - name: Point npm at the local proxy
-        run: |
-          npm config set registry "$NPM_PROXY"
-          npm config set cafile /tmp/cluster-ca.crt
+      - uses: azrtydxb/ant-setup-action@a0009593481e175e73d029e92a167609da1b386c # v1
 
       - run: npm ci --no-audit --no-fund
       - run: npm run format:check
@@ -76,19 +64,7 @@ jobs:
       DATABASE_URL: postgres://postgres:ci@postgres:5432/postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # The job container does not inherit the runner's cluster CA.
-      - name: Trust the cluster CA
-        run: |
-          apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
-          curl -sk -o /tmp/cluster-ca.crt \
-            https://192.168.10.131:8443/repository/public/cluster-ca.crt
-          echo "NODE_EXTRA_CA_CERTS=/tmp/cluster-ca.crt" >> "$GITHUB_ENV"
-
-      - name: Point npm at the local proxy
-        run: |
-          npm config set registry "$NPM_PROXY"
-          npm config set cafile /tmp/cluster-ca.crt
+      - uses: azrtydxb/ant-setup-action@a0009593481e175e73d029e92a167609da1b386c # v1
 
       - run: npm ci --no-audit --no-fund
       - run: npm run test:integration
@@ -101,11 +77,13 @@ jobs:
     # Pushes the "Deploy sha-… to kw" commit that Kuvryn Sync rolls out.
     permissions:
       contents: write
+      id-token: write
     env:
       PUSH_REGISTRY: 192.168.10.131:5000
       IMAGE: 192.168.10.131:5000/azrtydxb/labbook
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azrtydxb/ant-setup-action@a0009593481e175e73d029e92a167609da1b386c # v1
 
       - name: Compute tags
         id: meta
@@ -149,8 +127,6 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          build-args: |
-            NPM_REGISTRY=${{ env.NPM_PROXY }}
           cache-from: type=registry,ref=${{ env.IMAGE }}-buildcache:arm64
           cache-to: type=registry,ref=${{ env.IMAGE }}-buildcache:arm64,mode=max,image-manifest=true,ignore-error=true
           provenance: false
