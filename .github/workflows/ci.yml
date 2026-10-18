@@ -96,7 +96,7 @@ jobs:
   image:
     needs: test
     if: github.event_name != 'pull_request'
-    runs-on: arc-azrtydxb-publish
+    runs-on: arc-azrtydxb
     timeout-minutes: 60
     # Pushes the "Deploy sha-… to kw" commit that Kuvryn Sync rolls out.
     permissions:
@@ -126,9 +126,9 @@ jobs:
           [registry."192.168.10.131:5000"]
             insecure = true
           [registry."docker.io"]
-            mirrors = ["192.168.10.131"]
+            mirrors = ["ant.azrty.com"]
           [registry."gcr.io"]
-            mirrors = ["192.168.10.131"]
+            mirrors = ["ant.azrty.com"]
           EOF
           docker buildx create --name builder --driver docker-container \
             --platform linux/arm64 --buildkitd-config /tmp/buildkitd.toml --use

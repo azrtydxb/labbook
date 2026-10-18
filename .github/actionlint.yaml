@@ -1,4 +1,3 @@
 self-hosted-runner:
   labels:
     - arc-azrtydxb
-    - arc-azrtydxb-publish

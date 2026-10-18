@@ -160,7 +160,7 @@ Builds and tests run on the cluster, not on a laptop:
 
 - **CI** (`.github/workflows/ci.yml`, `azrtydxb` org runners): `arc-azrtydxb` runs format check,
   ESLint, typecheck, Vitest (with a Postgres service; the API suite needs `DATABASE_URL`) and the
-  build; `arc-azrtydxb-publish` builds the arm64 image, pushes
+  build; `arc-azrtydxb` builds the arm64 image, pushes
   `192.168.10.131:5000/azrtydxb/labbook:sha-<short>` (and `:main`), checks the pull name resolves,
   and on `main` records the tag in `deploy/helm/labbook/values-kw.yaml` for Kuvryn Sync.
 - **Inner loop**: `~/Development/internal-lab/scripts/dev-build.sh` from this directory builds on
