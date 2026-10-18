@@ -9,6 +9,10 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+  # Integration tier: the Postgres-backed suite, nightly. Pull requests run the
+  # hermetic unit suite only (see the `test` job).
+  schedule:
+    - cron: '17 2 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,10 +22,44 @@ env:
   NPM_PROXY: https://192.168.10.131:8443/repository/npmjs/
 
 jobs:
+  # Unit tier (required check `test`): format, lint, typecheck, the hermetic
+  # unit suite (evaluate/openapi — no database) and the build. No Postgres here;
+  # the database-backed suite runs in the `integration` job (nightly).
   test:
     runs-on: arc-azrtydxb
     timeout-minutes: 30
     # The runner image has no node; the Dockerfile uses the same base image.
+    container:
+      image: node:22-bookworm-slim
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The job container does not inherit the runner's cluster CA.
+      - name: Trust the cluster CA
+        run: |
+          apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
+          curl -sk -o /tmp/cluster-ca.crt \
+            https://192.168.10.131:8443/repository/public/cluster-ca.crt
+          echo "NODE_EXTRA_CA_CERTS=/tmp/cluster-ca.crt" >> "$GITHUB_ENV"
+
+      - name: Point npm at the local proxy
+        run: |
+          npm config set registry "$NPM_PROXY"
+          npm config set cafile /tmp/cluster-ca.crt
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run build
+
+  # Integration tier: the Postgres-backed API and baseline suites against the
+  # service container. Not a required check and never on a pull request.
+  integration:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: arc-azrtydxb
+    timeout-minutes: 30
     container:
       image: node:22-bookworm-slim
     services:
@@ -53,11 +91,7 @@ jobs:
           npm config set cafile /tmp/cluster-ca.crt
 
       - run: npm ci --no-audit --no-fund
-      - run: npm run format:check
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - run: npm run test:integration
 
   image:
     needs: test
