@@ -1,13 +1,15 @@
-# labbook on kw:  kubectl --context kw apply -k deploy/kw
+# labbook on kw. The per-app Postgres (postgres.yaml) and its logical pg_dump CronJob
+# (backup.yaml) were retired when labbook moved onto the shared-pg cluster, which backs
+# the database up hourly with the barman plugin (7-day retention + PITR); app.yaml went
+# with them because it still named the retired cluster's secret. kuvryn-sync renders
+# deploy/helm/labbook for the workload, so what remains here is the namespace + ingress.
+# Apply:  kubectl --context kw apply -k deploy/kw
 # The admin Secret is not in the repo; README.md "Deploy" creates it.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: labbook
 resources:
   - namespace.yaml
-  - postgres.yaml
-  - backup.yaml
-  - app.yaml
   - ingress.yaml
 images:
   # Pinned by digest; update from the CI run's summary (never a moving tag).
