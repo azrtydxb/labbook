@@ -1,4 +1,4 @@
-{{- if .Values.backups.enabled }}
+{{- if or .Values.backups.enabled .Values.keepData }}
 {{- $fullname := include "labbook.fullname" . -}}
 {{- $b := .Values.backups -}}
 {{- $image := $b.image | default .Values.postgresql.imageName -}}
@@ -25,6 +25,7 @@ spec:
   resources:
     requests:
       storage: {{ $b.storage.size }}
+{{- if .Values.backups.enabled }}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -110,4 +111,5 @@ spec:
             - name: dumps
               persistentVolumeClaim:
                 claimName: {{ $fullname }}-dumps
+{{- end }}
 {{- end }}
