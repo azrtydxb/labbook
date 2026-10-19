@@ -1,5 +1,6 @@
 # Test on the arm64 ARC runners (npm through Kuvryn Ant via azrtydxb/ant-setup-action),
-# then build and push the arm64 image to Nexus.
+# then build and push the arm64 image to Kuvryn Ant (ant.azrty.com/oci-hosted, GitHub
+# OIDC login, no stored secret); kw replicates it.
 # Adapted from internal-lab/templates/workflows/{node,container-image}.yml; read
 # internal-lab/AGENTS.md before changing runner labels, registries or the CA step.
 name: CI
@@ -79,8 +80,8 @@ jobs:
       contents: write
       id-token: write
     env:
-      PUSH_REGISTRY: 192.168.10.131:5000
-      IMAGE: 192.168.10.131:5000/azrtydxb/labbook
+      PUSH_REGISTRY: ant.azrty.com/oci-hosted
+      IMAGE: ant.azrty.com/oci-hosted/azrtydxb/labbook
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: azrtydxb/ant-setup-action@543d780ae8e4ff1fe0473a4778f18edceb995768 # v1
@@ -112,11 +113,13 @@ jobs:
             --platform linux/arm64 --buildkitd-config /tmp/buildkitd.toml --use
           docker buildx inspect --bootstrap
 
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: azrtydxb/ant-setup-action@543d780ae8e4ff1fe0473a4778f18edceb995768 # v1
         with:
-          registry: ${{ env.PUSH_REGISTRY }}
-          username: ${{ secrets.NEXUS_USER }}
-          password: ${{ secrets.NEXUS_PASSWORD }}
+          docker-login: "true"
+          required: "true"
+          go: "false"
+          cargo: "false"
+          pip: "false"
 
       - name: Build and push
         id: build
@@ -135,22 +138,24 @@ jobs:
       - name: Digest
         run: |
           echo "pushed ${IMAGE}@${{ steps.build.outputs.digest }}"
-          echo "deploy: 192.168.10.131/azrtydxb/labbook@${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "deploy (kw): ant.kw.watteel.lab/oci-hosted/azrtydxb/labbook@${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
-      # The image is only useful if a node can pull it under the name the chart
-      # uses; proving that here turns a deploy-time ImagePullBackOff into a
-      # build-time failure. (Same as kuvryn-scout.)
-      - name: The pull name resolves
+      # The image must resolve on the authoritative Ant before kw is told to run
+      # it; kw replicates oci-hosted (30 s poll) and its nodes rewrite the chart's
+      # 192.168.10.131/azrtydxb/labbook name to that replica. The pause below gives
+      # replication a head start before the deploy commit lands. (Same as kuvryn-scout.)
+      - name: The pushed tag resolves
         run: |
           tag="sha-${GITHUB_SHA::7}"
           for _ in $(seq 1 30); do
-            if docker manifest inspect --insecure "192.168.10.131/azrtydxb/labbook:${tag}" >/dev/null 2>&1; then
-              echo "192.168.10.131/azrtydxb/labbook:${tag} is pullable"
+            if docker manifest inspect "${IMAGE}:${tag}" >/dev/null 2>&1; then
+              echo "${IMAGE}:${tag} resolves"
+              if [ "${GITHUB_REF}" = "refs/heads/main" ]; then sleep 60; fi
               exit 0
             fi
             sleep 4
           done
-          echo "pushed to ${PUSH_REGISTRY} but 192.168.10.131/azrtydxb/labbook:${tag} does not resolve" >&2
+          echo "pushed to ${PUSH_REGISTRY} but ${IMAGE}:${tag} does not resolve" >&2
           exit 1
 
       # The tag kw should run becomes a fact in Git; Kuvryn Sync watches main and
