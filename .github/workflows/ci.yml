@@ -92,7 +92,6 @@ jobs:
           {
             echo "tags<<EOF"
             echo "${IMAGE}:sha-${GITHUB_SHA::7}"
-            [ "${GITHUB_REF}" = "refs/heads/main" ] && echo "${IMAGE}:main"
             [ "${GITHUB_REF_TYPE}" = "tag" ] && echo "${IMAGE}:${GITHUB_REF_NAME#v}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
