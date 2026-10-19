@@ -5,7 +5,7 @@
 # kuvryn-scout), so the tag kw runs is a fact in Git. Do not edit it by hand: the
 # next build overwrites it.
 image:
-  repository: 192.168.10.131/azrtydxb/labbook
+  repository: ant.kw.watteel.lab/oci-hosted/azrtydxb/labbook
   tag: 'sha-14deb50' # managed by CI
 
 replicas: 2
