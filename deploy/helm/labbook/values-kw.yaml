@@ -6,7 +6,7 @@
 # next build overwrites it.
 image:
   repository: 192.168.10.131/azrtydxb/labbook
-  tag: 'sha-ee74165' # managed by CI
+  tag: 'sha-14deb50' # managed by CI
 
 replicas: 2
 
