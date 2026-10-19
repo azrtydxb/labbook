@@ -45,6 +45,14 @@ postgresql:
     storageClass: longhorn-single
 
 backups:
+  # Retired: labbook's database moved to the shared-pg cluster, where the barman
+  # plugin archives WAL continuously and takes hourly base backups (7-day retention,
+  # PITR), so this second, per-app logical dump is no longer maintained. It had been
+  # failing since the move anyway -- the job reads username/password/dbname keys but
+  # the shared secret carries only a `uri` -- 2133 CreateContainerConfigError retries
+  # in 8 hours. keepData is true, so the dumps PVC is still rendered and the volume
+  # stays reachable.
+  enabled: false
   schedule: '17 */6 * * *'
   retentionDays: 30
   # TrueNAS NFS; after the first bind, set the PV's reclaim policy to Retain.
