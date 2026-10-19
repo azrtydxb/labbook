@@ -34,7 +34,7 @@ jobs:
       image: node:22-bookworm-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: azrtydxb/ant-setup-action@543d780ae8e4ff1fe0473a4778f18edceb995768 # v1
+      - uses: azrtydxb/ant-setup-action@7c6f1b8ca34a0a127b43040f4e16bbafdbd83791 # v1
 
       - run: npm ci --no-audit --no-fund
       - run: npm run format:check
@@ -65,7 +65,7 @@ jobs:
       DATABASE_URL: postgres://postgres:ci@postgres:5432/postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: azrtydxb/ant-setup-action@543d780ae8e4ff1fe0473a4778f18edceb995768 # v1
+      - uses: azrtydxb/ant-setup-action@7c6f1b8ca34a0a127b43040f4e16bbafdbd83791 # v1
 
       - run: npm ci --no-audit --no-fund
       - run: npm run test:integration
@@ -84,7 +84,7 @@ jobs:
       IMAGE: ant.azrty.com/oci-hosted/azrtydxb/labbook
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: azrtydxb/ant-setup-action@543d780ae8e4ff1fe0473a4778f18edceb995768 # v1
+      - uses: azrtydxb/ant-setup-action@7c6f1b8ca34a0a127b43040f4e16bbafdbd83791 # v1
 
       - name: Compute tags
         id: meta
@@ -113,7 +113,7 @@ jobs:
             --platform linux/arm64 --buildkitd-config /tmp/buildkitd.toml --use
           docker buildx inspect --bootstrap
 
-      - uses: azrtydxb/ant-setup-action@543d780ae8e4ff1fe0473a4778f18edceb995768 # v1
+      - uses: azrtydxb/ant-setup-action@7c6f1b8ca34a0a127b43040f4e16bbafdbd83791 # v1
         with:
           docker-login: "true"
           required: "true"
