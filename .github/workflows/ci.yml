@@ -148,7 +148,9 @@ jobs:
         run: |
           tag="sha-${GITHUB_SHA::7}"
           for _ in $(seq 1 30); do
-            if docker manifest inspect "${IMAGE}:${tag}" >/dev/null 2>&1; then
+            # imagetools, not `docker manifest inspect`: Ant answers 406 unless the
+            # Accept header lists the OCI media type the image was pushed with.
+            if docker buildx imagetools inspect --raw "${IMAGE}:${tag}" >/dev/null 2>&1; then
               echo "${IMAGE}:${tag} resolves"
               if [ "${GITHUB_REF}" = "refs/heads/main" ]; then sleep 60; fi
               exit 0
