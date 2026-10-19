@@ -115,7 +115,7 @@ jobs:
       - id: ant
         uses: azrtydxb/ant-setup-action@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
         with:
-          build-cache: "true"
+          build-cache: 'true'
           cache-name: labbook
           docker-login: 'true'
           required: 'true'
