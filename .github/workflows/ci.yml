@@ -1,6 +1,6 @@
 # Test on the arm64 ARC runners in kubernetes container mode (npm through Kuvryn Ant via
-# azrtydxb/ant-setup-action), then build the arm64 image on the shared in-cluster BuildKit
-# (azrtydxb/.github/actions/setup-builder) and push it to Kuvryn Ant
+# azrtydxb/ant-setup-action), then build the arm64 image on the runner pod's BuildKit
+# sidecar (azrtydxb/.github/actions/setup-builder) and push it to Kuvryn Ant
 # (ant.azrty.com/oci-hosted, GitHub OIDC login, no stored secret); kw replicates it.
 # Adapted from internal-lab/templates/workflows/{node,container-image}.yml; read
 # internal-lab/AGENTS.md before changing runner labels, registries or the CA step.
@@ -28,7 +28,7 @@ jobs:
   # unit suite (evaluate/openapi — no database) and the build. No Postgres here;
   # the database-backed suite runs in the `integration` job (nightly).
   test:
-    runs-on: arc-azrtydxb-k8s
+    runs-on: arc-azrtydxb
     timeout-minutes: 30
     # The runner image has no node; the Dockerfile uses the same base image.
     container:
@@ -48,7 +48,7 @@ jobs:
   # service container. Not a required check and never on a pull request.
   integration:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
-    runs-on: arc-azrtydxb-k8s
+    runs-on: arc-azrtydxb
     timeout-minutes: 30
     container:
       image: node:22-bookworm-slim
@@ -75,7 +75,7 @@ jobs:
   image:
     needs: test
     if: github.event_name != 'pull_request'
-    runs-on: arc-azrtydxb-k8s
+    runs-on: arc-azrtydxb
     timeout-minutes: 60
     # Pushes the "Deploy sha-… to kw" commit that Kuvryn Sync rolls out.
     permissions:
@@ -98,12 +98,10 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # The shared rootless BuildKit in the cluster (mTLS certs mounted by the runner);
-      # its buildkitd.toml mirrors docker.io through Ant and trusts the home registries.
+      # The runner pod's rootless BuildKit sidecar (native arm64); its buildkitd.toml
+      # mirrors docker.io through Ant and trusts the home registries.
       - id: builder
-        uses: azrtydxb/.github/actions/setup-builder@c7ef6fad9eb7839efe599a5c95d9f407111e0c17 # main
-        with:
-          amd64: 'false'
+        uses: azrtydxb/.github/actions/setup-builder@6e018f76603d5fe3d3f3e3b0a9399ab1f27b17f3 # setup-builder-sidecar
 
       - id: ant
         uses: azrtydxb/ant-setup-action@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
