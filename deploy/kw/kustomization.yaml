@@ -14,5 +14,5 @@ resources:
 images:
   # Pinned by digest; update from the CI run's summary (never a moving tag).
   - name: labbook
-    newName: 192.168.10.131/azrtydxb/labbook
+    newName: ant.kw.watteel.lab/oci-hosted/azrtydxb/labbook
     digest: sha256:4bfe46cd5bc2e2515fb4523619c4e987c83669dd0cefec2eb008f7158011ed49
