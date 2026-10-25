@@ -1,6 +1,7 @@
-# Test on the arm64 ARC runners (npm through Kuvryn Ant via azrtydxb/ant-setup-action),
-# then build and push the arm64 image to Kuvryn Ant (ant.azrty.com/oci-hosted, GitHub
-# OIDC login, no stored secret); kw replicates it.
+# Test on the arm64 ARC runners in kubernetes container mode (npm through Kuvryn Ant via
+# azrtydxb/ant-setup-action), then build the arm64 image on the shared in-cluster BuildKit
+# (azrtydxb/.github/actions/setup-builder) and push it to Kuvryn Ant
+# (ant.azrty.com/oci-hosted, GitHub OIDC login, no stored secret); kw replicates it.
 # Adapted from internal-lab/templates/workflows/{node,container-image}.yml; read
 # internal-lab/AGENTS.md before changing runner labels, registries or the CA step.
 name: CI
@@ -27,7 +28,7 @@ jobs:
   # unit suite (evaluate/openapi — no database) and the build. No Postgres here;
   # the database-backed suite runs in the `integration` job (nightly).
   test:
-    runs-on: arc-azrtydxb
+    runs-on: arc-azrtydxb-k8s
     timeout-minutes: 30
     # The runner image has no node; the Dockerfile uses the same base image.
     container:
@@ -47,7 +48,7 @@ jobs:
   # service container. Not a required check and never on a pull request.
   integration:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
-    runs-on: arc-azrtydxb
+    runs-on: arc-azrtydxb-k8s
     timeout-minutes: 30
     container:
       image: node:22-bookworm-slim
@@ -61,8 +62,9 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+    # Kubernetes mode runs the service in the job pod, so it is on localhost.
     env:
-      DATABASE_URL: postgres://postgres:ci@postgres:5432/postgres
+      DATABASE_URL: postgres://postgres:ci@localhost:5432/postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: azrtydxb/ant-setup-action@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
@@ -73,7 +75,7 @@ jobs:
   image:
     needs: test
     if: github.event_name != 'pull_request'
-    runs-on: arc-azrtydxb
+    runs-on: arc-azrtydxb-k8s
     timeout-minutes: 60
     # Pushes the "Deploy sha-… to kw" commit that Kuvryn Sync rolls out.
     permissions:
@@ -96,27 +98,20 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Set up buildx
-        run: |
-          cat > /tmp/buildkitd.toml <<'EOF'
-          [registry."192.168.10.131"]
-            insecure = true
-          [registry."192.168.10.131:5000"]
-            insecure = true
-          [registry."docker.io"]
-            mirrors = ["ant.azrty.com"]
-          [registry."gcr.io"]
-            mirrors = ["ant.azrty.com"]
-          EOF
-          docker buildx create --name builder --driver docker-container \
-            --platform linux/arm64 --buildkitd-config /tmp/buildkitd.toml --use
-          docker buildx inspect --bootstrap
+      # The shared rootless BuildKit in the cluster (mTLS certs mounted by the runner);
+      # its buildkitd.toml mirrors docker.io through Ant and trusts the home registries.
+      - id: builder
+        uses: azrtydxb/.github/actions/setup-builder@c7ef6fad9eb7839efe599a5c95d9f407111e0c17 # main
+        with:
+          amd64: 'false'
 
       - id: ant
         uses: azrtydxb/ant-setup-action@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
         with:
           build-cache: 'true'
           cache-name: labbook
+          # The arch of the image, not of the runner the job happens to run on.
+          arch-suffix: arm64
           docker-login: 'true'
           required: 'true'
           go: 'false'
@@ -128,9 +123,10 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          builder: builder
+          builder: ${{ steps.builder.outputs.name }}
           platforms: linux/arm64
-          push: true
+          # Ant only lets main and tags publish; other refs build without pushing.
+          push: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: ${{ steps.ant.outputs.cache-from }}
           cache-to: ${{ steps.ant.outputs.cache-to }}
@@ -138,6 +134,7 @@ jobs:
           sbom: false
 
       - name: Digest
+        if: steps.build.outputs.digest != '' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         run: |
           echo "pushed ${IMAGE}@${{ steps.build.outputs.digest }}"
           echo "deploy (kw): ant.kw.watteel.lab/oci-hosted/azrtydxb/labbook@${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
@@ -147,6 +144,7 @@ jobs:
       # 192.168.10.131/azrtydxb/labbook name to that replica. The pause below gives
       # replication a head start before the deploy commit lands. (Same as kuvryn-scout.)
       - name: The pushed tag resolves
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         run: |
           tag="sha-${GITHUB_SHA::7}"
           for _ in $(seq 1 30); do
@@ -206,7 +204,7 @@ jobs:
             git config user.email "ci@labbook.invalid"
             git add "$VALUES"
             git commit --quiet -m "Deploy $TAG to kw [skip ci]" -m "Written by CI after the image was pushed and proven pullable."
-            if git push --quiet git@github.com:${GITHUB_REPOSITORY}.git HEAD:main; then
+            if git push --quiet "git@github.com:${GITHUB_REPOSITORY}.git" HEAD:main; then
               echo "recorded $TAG on main"
               exit 0
             fi
