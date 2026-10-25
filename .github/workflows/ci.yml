@@ -206,7 +206,7 @@ jobs:
             git config user.email "ci@labbook.invalid"
             git add "$VALUES"
             git commit --quiet -m "Deploy $TAG to kw [skip ci]" -m "Written by CI after the image was pushed and proven pullable."
-            if git push --quiet git@github.com:${GITHUB_REPOSITORY}.git HEAD:main; then
+            if git push --quiet "git@github.com:${GITHUB_REPOSITORY}.git" HEAD:main; then
               echo "recorded $TAG on main"
               exit 0
             fi
