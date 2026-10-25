@@ -101,7 +101,7 @@ jobs:
       # The runner pod's rootless BuildKit sidecar (native arm64); its buildkitd.toml
       # mirrors docker.io through Ant and trusts the home registries.
       - id: builder
-        uses: azrtydxb/.github/actions/setup-builder@6e018f76603d5fe3d3f3e3b0a9399ab1f27b17f3 # setup-builder-sidecar
+        uses: azrtydxb/.github/actions/setup-builder@d021f2ca9fa3d6682085a7d069b7c8b1dc7b9b80 # main
 
       - id: ant
         uses: azrtydxb/ant-setup-action@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
