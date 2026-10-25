@@ -101,7 +101,7 @@ jobs:
       # The shared rootless BuildKit in the cluster (mTLS certs mounted by the runner);
       # its buildkitd.toml mirrors docker.io through Ant and trusts the home registries.
       - id: builder
-        uses: azrtydxb/.github/actions/setup-builder@cf1e4789ef0e97b1c2df8c97f633d4937dfb9a40 # setup-builder
+        uses: azrtydxb/.github/actions/setup-builder@c7ef6fad9eb7839efe599a5c95d9f407111e0c17 # main
         with:
           amd64: 'false'
 
