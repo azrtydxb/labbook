@@ -1,5 +1,5 @@
 # labbook: one image, the Fastify API serving the built React app.
-# Built for linux/arm64 on the kw BuildKit or the in-cluster BuildKit of the arc-azrtydxb-k8s runners (no emulation).
+# Built for linux/arm64 on the kw BuildKit or the BuildKit sidecar of the arc-azrtydxb runners (no emulation).
 #
 # NPM_REGISTRY points npm at the Nexus proxy in CI. BuildKit does not carry the cluster CA,
 # hence strict-ssl off for that registry only (docs/nexus-endpoints.md in internal-lab).
