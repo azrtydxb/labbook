@@ -6,7 +6,7 @@
 # next build overwrites it.
 image:
   repository: ant.kw.watteel.lab/oci-hosted/azrtydxb/labbook
-  tag: 'sha-9c74512' # managed by CI
+  tag: 'sha-cdaf3e7' # managed by CI
 
 replicas: 2
 
