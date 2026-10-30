@@ -28,6 +28,9 @@ jobs:
   # unit suite (evaluate/openapi — no database) and the build. No Postgres here;
   # the database-backed suite runs in the `integration` job (nightly).
   test:
+    # The nightly run only adds the integration tier; main already passed this
+    # unit run on its push.
+    if: github.event_name != 'schedule'
     runs-on: arc-azrtydxb
     timeout-minutes: 30
     # The runner image has no node; the Dockerfile uses the same base image.
@@ -74,7 +77,9 @@ jobs:
 
   image:
     needs: test
-    if: github.event_name != 'pull_request'
+    # Main and tag pushes (and manual dispatch) publish; the nightly would only
+    # rebuild an image that the push run already pushed for the same commit.
+    if: github.event_name != 'pull_request' && github.event_name != 'schedule'
     runs-on: arc-azrtydxb
     timeout-minutes: 60
     # Pushes the "Deploy sha-… to kw" commit that Kuvryn Sync rolls out.
