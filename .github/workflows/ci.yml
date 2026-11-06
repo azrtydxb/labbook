@@ -1,6 +1,6 @@
-# Test on the arm64 ARC runners in kubernetes container mode (npm through Kuvryn Ant via
-# azrtydxb/ant-setup-action), then build the arm64 image on the runner pod's BuildKit
-# sidecar (azrtydxb/.github/actions/setup-builder) and push it to Kuvryn Ant
+# Public repo: GitHub-hosted runners only. Test in a node container on ubuntu-latest (npm
+# through Kuvryn Ant via azrtydxb/ant-setup-action), then build the arm64 image natively on
+# ubuntu-24.04-arm (no emulation) and push it to Kuvryn Ant
 # (ant.azrty.com/oci-hosted, GitHub OIDC login, no stored secret); kw replicates it.
 # Adapted from internal-lab/templates/workflows/{node,container-image}.yml; read
 # internal-lab/AGENTS.md before changing runner labels, registries or the CA step.
@@ -31,9 +31,9 @@ jobs:
     # The nightly run only adds the integration tier; main already passed this
     # unit run on its push.
     if: github.event_name != 'schedule'
-    runs-on: arc-azrtydxb
+    runs-on: ubuntu-latest
     timeout-minutes: 30
-    # The runner image has no node; the Dockerfile uses the same base image.
+    # Same Node base image as the Dockerfile.
     container:
       image: node:22-bookworm-slim
     steps:
@@ -51,7 +51,7 @@ jobs:
   # service container. Not a required check and never on a pull request.
   integration:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
-    runs-on: arc-azrtydxb
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
       image: node:22-bookworm-slim
@@ -65,9 +65,9 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
-    # Kubernetes mode runs the service in the job pod, so it is on localhost.
+    # The job runs in a container, so the service is reached by its name.
     env:
-      DATABASE_URL: postgres://postgres:ci@localhost:5432/postgres
+      DATABASE_URL: postgres://postgres:ci@postgres:5432/postgres
     steps:
       - uses: actions/checkout@v7
       - uses: azrtydxb/ant-setup-action@v1
@@ -80,7 +80,8 @@ jobs:
     # Main and tag pushes (and manual dispatch) publish; the nightly would only
     # rebuild an image that the push run already pushed for the same commit.
     if: github.event_name != 'pull_request' && github.event_name != 'schedule'
-    runs-on: arc-azrtydxb
+    # Native arm64 runner: the image is arm64-only, built without emulation.
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     # Pushes the "Deploy sha-… to kw" commit that Kuvryn Sync rolls out.
     permissions:
@@ -103,10 +104,7 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # The runner pod's rootless BuildKit sidecar (native arm64); its buildkitd.toml
-      # mirrors docker.io through Ant and trusts the home registries.
-      - id: builder
-        uses: azrtydxb/.github/actions/setup-builder@main
+      - uses: docker/setup-buildx-action@v4
 
       - id: ant
         uses: azrtydxb/ant-setup-action@v1
@@ -126,7 +124,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          builder: ${{ steps.builder.outputs.name }}
           platforms: linux/arm64
           # Ant only lets main and tags publish; other refs build without pushing.
           push: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
