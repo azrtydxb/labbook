@@ -185,7 +185,9 @@ kubectl --context kw -n labbook rollout status deploy/labbook
 Releases are GitOps, as for kuvryn-scout: Kuvryn Sync renders the Helm chart in
 [deploy/helm/labbook](deploy/helm/labbook/README.md) with `values-kw.yaml` from `main`. After CI has
 pushed an image and proven it pullable, it commits `Deploy sha-<short> to kw [skip ci]`, writing that
-tag into `values-kw.yaml`; Kuvryn Sync then rolls it out. So a green build on `main` deploys itself.
+tag into `values-kw.yaml`, and its `deploy-ref` job fast-forwards the branch `deploy/kw` (which Kuvryn
+Sync tracks) to it; Kuvryn Sync then rolls it out. So a green build on `main` deploys itself, and values
+never reach kw before the image that reads them (Kuvryn-Orbit#370).
 `deploy/kw` (kustomize) is the previous, manual path, kept until the Helm route has run for a while.
 
 `*.kw.watteel.lab` already resolves to the ingress-nginx LoadBalancer (192.168.10.120), so no DNS
